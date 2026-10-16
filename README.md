@@ -90,8 +90,31 @@ Otorisasi ada di database, bukan di UI.
 - **Composite FK.** `trades (account_id, user_id) → trading_accounts (id, user_id)` mencegah trade menunjuk akun milik user lain, bahkan kalau ada kode yang lupa mengecek.
 - **Bucket privat.** Screenshot ada di bucket privat `trade-screenshots`, key-nya `<user_id>/<trade_id>/<file>`. RLS `storage.objects` membatasi berdasarkan prefix key. Gambar dibaca lewat route terautentikasi `/api/screenshots/[id]`, tidak pernah lewat URL publik.
 - **Anon key aman di client.** Anon key memang untuk browser; yang melindungi data adalah RLS, bukan kerahasiaan key.
+- **`anon` tidak punya grant apa pun.** Migrasi `20261017000100_revoke-anon-writes.sql` mencabut seluruh hak `anon` di schema `public`, termasuk default privileges untuk tabel baru. Sebelumnya `anon` memegang `INSERT/UPDATE/DELETE/SELECT` di semua tabel: tidak berbahaya karena RLS menolak semuanya, tapi API **berbohong** — `DELETE` menjawab `204` sambil menghapus nol baris, dan `SELECT` menjawab `200 []`. Sekarang semuanya `401`, jadi jawabannya sesuai kenyataan.
 
 Kunci yang tidak boleh masuk repo: `.env.local`, `Prompt/.insforge/`, `insforge.toml`. Semuanya sudah ada di `.gitignore`.
+
+### Hasil audit keamanan (2026-10-17)
+
+Dijalankan manual: `diagnose advisor` dan `diagnose db` **tidak bisa dipakai** pada project yang di-link lewat `--api-key` (`advisor` mengembalikan `scan: null`, `diagnose db` gagal dengan "Unrestricted SQL execution is disabled"). Semua temuan di bawah diverifikasi lewat `db query` dan HTTP langsung dengan token nyata.
+
+| Diuji | Hasil |
+|---|---|
+| Isolasi antar user (`trades`, `trading_accounts`) | baca/coba-update baris user lain → `200 []`, tidak bocor |
+| Tulis lintas user | `401`/`403`, ditolak |
+| Isolasi storage | upload ke folder orang lain ditolak **di langkah strategy** (403); baca & hapus objek orang lain → `404`, objek tetap utuh |
+| `sub` JWT vs `id` user | identik — prefix `foldername(key)[1]` benar-benar mengikat |
+| Tabel deny-all (`market_fetch_log`) | user login → `403`; `anon` → `401` |
+| Grant `anon` | dicabut seluruhnya (lihat di atas) |
+| Nilai rahasia di bundle klien | tidak ada; hanya anon key yang memang publik |
+| Modul server bocor ke klien | tidak ada (`insforge/admin`, `market/ingest`, `rates/store` tidak muncul di `.next/static`) |
+| Indeks | setiap kolom filter RLS (`user_id`) terindeks, plus indeks komposit penutup |
+
+Jebakan yang perlu diketahui saat menguji:
+
+- **Baca yang ditolak tidak menghasilkan error.** RLS memfilter baris, jadi PostgREST menjawab `200` dengan array kosong. "Tidak ada data" dan "tidak boleh lihat" terlihat identik dari klien. Saat mendiagnosis hasil kosong, query sebagai service role dulu untuk memastikan barisnya memang ada.
+- **Storage upload bukan `POST /objects`.** Endpoint itu **mengabaikan** field path dan membuat key sendiri di root bucket, sehingga selalu gagal dengan `403`. Alur yang benar: `POST /upload-strategy` (validasi izin di sini) → `PUT /objects/<key>` multipart. Pola yang salah akan terlihat seperti masalah izin padahal bukan.
+- **`diagnose db` tidak tersedia** di mode `--api-key`. Pakai `db query` langsung.
 
 ### Constraint yang menjaga integritas
 
