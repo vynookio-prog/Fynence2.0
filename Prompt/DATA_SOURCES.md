@@ -42,6 +42,28 @@ Konsekuensi: masalahnya **bukan hanya plan-gating**. `US100`/`NDX` memang ada te
 
 Jalan yang sah bila indeks AS tetap dibutuhkan: naik ke plan Grow/Pro/Venture, atau tampilkan QQQ/DIA dengan **label eksplisit sebagai ETF proxy**, bukan sebagai indeks.
 
+**Koreksi kategori 2026-10-17 — equity Nasdaq, bukan indeks.** Kebutuhan "Nasdaq" ternyata merujuk pada **saham yang tercatat di bursa Nasdaq**, bukan indeks. Ini katalog dan jalur yang berbeda, dan hasilnya positif:
+
+| Yang diuji | Katalog | Hasil |
+|---|---|---|
+| `/indices` (indeks) | — | **0 simbol AS** dari 1.309. Semua indeks AS tertutup. |
+| `/stocks?exchange=NASDAQ` (equity) | ✅ | **4.531 saham** tersedia, `status: ok` |
+
+Uji `time_series` pada equity Nasdaq free tier — semua `200`, `type: Common Stock`, `exchange: NASDAQ`:
+
+| Simbol | Hasil |
+|---|---|
+| `AAPL` | ✅ 200 |
+| `MSFT` | ✅ 200 |
+| `NVDA` | ✅ 200 |
+| `TSLA` | ✅ 200 |
+| `AMD` | ✅ 200 |
+
+**Kesimpulan:** jalur indeks AS buntu di free tier, tetapi jalur **equity Nasdaq terbuka lebar**. Saham individual tidak terkena plan-gate seperti indeks. Ini membuka Macro Desk/Deep Dive berbasis emiten (mis. NVDA, AAPL) alih-alih berbasis indeks.
+
+Catatan penting: equity adalah **instrumen yang berbeda** dari indeks. Jangan menampilkan saham sebagai pengganti indeks, dan sebaliknya. `/stocks` juga memuat `Warrant`, `Right`, `American Depositary Receipt`, dan `Unit` — bukan hanya `Common Stock`. Filter berdasarkan `type` sebelum menampilkan atau menghitung apa pun.
+
+
 
 Fakta kuota/lisensi dari halaman resmi ([pricing](https://twelvedata.com/pricing), Basic): 8 API kredit/menit, 800 kredit/hari, 8 trial WS kredit, hanya 3 markets, dan **"Internal non-display usage"**.
 
@@ -61,11 +83,13 @@ Catat URL harga/dokumentasi resmi, limit free yang berlaku di akun, aturan kredi
 |---|---|---|---|
 | XAUUSD | ✅ `XAU/USD` | ❌ premium | Hanya Twelve Data |
 | BTCUSD | ✅ `BTC/USD` | ✅ `TIME_SERIES_DAILY` | Satu-satunya yang lolos di dua provider |
+| Saham Nasdaq (equity) | ✅ (`/stocks?exchange=NASDAQ`, 4.531 simbol; AAPL/MSFT/NVDA/TSLA/AMD semua 200) | ❌ tidak diuji | **Jalur terbuka** — tidak kena plan-gate |
 | US100 | ❌ plan-gated (`US100` Pro/Venture, `NDX` Grow/Venture) | ❌ tidak diuji | Butuh plan berbayar, atau pakai `QQQ` dengan label ETF proxy |
 | US30 | ❌ tidak ada di katalog (`count: 0`) | ❌ invalid | Tidak ada bahkan di katalog; hanya `DIA` sebagai ETF proxy |
 | MNQ | ❌ tidak didukung (tanpa katalog futures) | ❌ invalid | Tidak akan tersedia di provider ini berapa pun plan-nya |
 
-**Kesimpulan cakupan:** dari empat instrumen yang dibutuhkan sekarang, hanya **XAUUSD dan BTCUSD** yang dapat diakses di free tier — dan keduanya hanya lewat Twelve Data, yang lisensi free tier-nya personal/internal saja. US100 dan US30 tidak dapat dipenuhi tanpa plan berbayar.
+**Kesimpulan cakupan:** indeks AS tidak dapat dipenuhi di free tier (US100 plan-gated, US30 tidak ada di katalog). Yang terbuka: **XAUUSD, BTCUSD, dan seluruh equity Nasdaq** (4.531 simbol). Bila Macro Desk dipindahkan dari indeks ke emiten, cakupannya justru paling luas — tetapi lisensi Twelve Data free tier tetap personal/internal saja.
+
 
 
 ### Kebijakan pengambilan
