@@ -3,7 +3,7 @@ import { ArrowDownRight, ArrowRight, BarChart3, Clock3, TrendingUp } from 'lucid
 import { EquityChart } from '@/components/analytics-charts'
 import { getInsForgeServerClient } from '@/lib/insforge/server'
 import { calculateAnalytics } from '@/lib/domain/analytics'
-import type { Trade } from '@/lib/domain/trades'
+import { realizedNetPnl, type Trade } from '@/lib/domain/trades'
 
 export const dynamic = 'force-dynamic'
 
@@ -109,19 +109,23 @@ export default async function Dashboard() {
           </div>
           {recent.length ? (
             <ul className="mt-5 divide-y divide-border">
-              {recent.map(t => (
+              {recent.map(t => {
+                // Shared domain function; no local re-derivation of net P&L.
+                const net = realizedNetPnl(t)
+                return (
                 <li key={t.id}>
                   <Link href={`/journal/${t.id}`} className="flex items-center justify-between gap-3 py-3 hover:text-accent">
                     <span className="min-w-0">
                       <span className="block font-mono text-sm">{t.symbol}</span>
                       <span className="mt-0.5 block text-[10px] text-muted">{new Date(t.openedAt).toLocaleDateString('id-ID', { dateStyle: 'medium' })} · {t.status === 'open' ? 'open' : 'closed'}</span>
                     </span>
-                    <span className={`shrink-0 font-mono text-xs tabular ${t.status === 'open' || t.realizedPnl == null ? 'text-muted' : Number(t.realizedPnl) - Number(t.fees) >= 0 ? 'text-positive' : 'text-negative'}`}>
-                      {t.status === 'open' || t.realizedPnl == null ? '—' : `${Number(t.realizedPnl) - Number(t.fees) >= 0 ? '+' : ''}${(Number(t.realizedPnl) - Number(t.fees)).toFixed(2)}`}
+                    <span className={`shrink-0 font-mono text-xs tabular ${net === null ? 'text-muted' : net.gte(0) ? 'text-positive' : 'text-negative'}`}>
+                      {net === null ? '—' : `${net.gte(0) ? '+' : ''}${net.toFixed(2)}`}
                     </span>
                   </Link>
                 </li>
-              ))}
+                )
+              })}
             </ul>
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center py-9 text-center">

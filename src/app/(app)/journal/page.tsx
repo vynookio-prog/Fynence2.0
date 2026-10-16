@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowRight, ChevronLeft, ChevronRight, Clock3, Search, SlidersHorizontal } from 'lucide-react'
 import { DeleteTradeButton } from '@/components/delete-trade-button'
 import { getInsForgeBrowserClient } from '@/lib/insforge/browser'
+import { realizedNetPnl } from '@/lib/domain/trades'
 
 type Row = {
   id: string; symbol: string; direction: string; status: string
@@ -66,7 +67,18 @@ export default function JournalPage() {
     return (id: string | null) => id ? map.get(id) ?? 'Akun dihapus' : null
   }, [accounts])
   const pageRows = filtered.slice(page * size, (page + 1) * size)
-  const net = (r: Row) => r.realized_pnl == null ? '—' : `${Number(r.realized_pnl) - Number(r.fees) >= 0 ? '+' : ''}${(Number(r.realized_pnl) - Number(r.fees)).toFixed(2)}`
+
+  // Uses the shared domain function rather than recomputing net P&L here.
+  const net = (r: Row) => {
+    if (r.status !== 'closed' || r.realized_pnl == null) return '—'
+    const value = realizedNetPnl({
+      id: r.id, symbol: r.symbol, direction: r.direction as 'long' | 'short',
+      status: r.status as 'open' | 'closed', openedAt: r.opened_at,
+      entryPrice: r.entry_price, size: r.size, fees: r.fees, realizedPnl: r.realized_pnl,
+    })
+    if (value === null) return '—'
+    return `${value.gte(0) ? '+' : ''}${value.toFixed(2)}`
+  }
 
   return (
     <div className="space-y-7">
