@@ -19,7 +19,7 @@
 ### Kandidat
 
 - [Twelve Data](https://twelvedata.com/docs) — kandidat quote/series; kuota per akun, endpoint, simbol, interval, delay, dan lisensi harus dikonfirmasi.
-- [Alpha Vantage](https://www.alphavantage.co/documentation/) — kandidat historis/market data; allowance dan endpoint yang berlaku harus dicek ulang. **Verifikasi 2026-10-16:** key valid (`TIME_SERIES_DAILY` IBM → 200, bar 2026-10-15); limit free dari respons API resminya: **25 request/hari, 1 request/detik**. Belum diuji untuk XAUUSD/BTCUSD/US30/US500/MNQ — coverage per instrumen masih pending.
+- [Alpha Vantage](https://www.alphavantage.co/documentation/) — kandidat historis/market data; allowance dan endpoint yang berlaku harus dicek ulang. **Verifikasi 2026-10-16:** key valid (`TIME_SERIES_DAILY` IBM → 200, bar 2026-10-15); limit free dari respons API resminya: **25 request/hari, 1 request/detik**. Coverage 5 instrumen (1 request masing-masing): `BTCUSD` via `TIME_SERIES_DAILY` **OK**; XAU **tidak tersedia di free** (`FX_DAILY`/`CURRENCY_EXCHANGE_RATE` invalid, `FX_INTRADAY` berstatus premium endpoint); `US30` invalid; `SPX` respons kosong `{}`; `MNQ` invalid. Kesimpulan: dari 5 instrumen Fynence, hanya BTC yang tercakup — Alpha Vantage bukan solusi pasar/indeks.
 - Observasi manual — boleh sebagai catatan, tetapi setiap rekaman harus diberi label `manual` dan waktu input.
 - Dataset historis — gunakan hanya setelah sumber, lisensi, redistribusi, retention, dan cakupan instrumen diverifikasi.
 
@@ -35,7 +35,9 @@ Akun Basic (free) terverifikasi, key valid. Coverage diuji terpisah sesuai pemer
 | US30 | `US30`, `DJI` | **Tidak ditemukan** — error: symbol invalid pada reference data. Ticker asli belum terkonfirmasi; jangan asumsikan. |
 | MNQ | `MNQ`, `MNQ1!` | **Tidak didukung** — Twelve Data punya katalog stocks/forex/crypto/ETF/funds/commodities/bonds; tanpa katalog futures. Jangan menganggap MNQ tersedia. |
 
-Fakta kuota/lisensi dari halaman resmi ([pricing](https://twelvedata.com/pricing), Basic): 8 API kredit/menit, 800 kredit/hari, 8 trial WS kredit, hanya 3 markets, dan **"Internal non-display usage"**. Artinya: tampilan harga di UI aplikasi berpotensi butuh hak display di luar free tier — ini lisensi, bukan sekadar teknis. Konfirmasi tertulis sebelum menampilkan data Twelve Data ke user.
+Fakta kuota/lisensi dari halaman resmi ([pricing](https://twelvedata.com/pricing), Basic): 8 API kredit/menit, 800 kredit/hari, 8 trial WS kredit, hanya 3 markets, dan **"Internal non-display usage"**.
+
+**Putusan lisensi 2026-10-17** (dari [Terms of Use](https://twelvedata.com/terms) + [artikel Commercial and personal usage](https://support.twelvedata.com/en/articles/5332349-commercial-and-personal-usage), terakhir diubah 2026-08-04): plan Individual (termasuk Basic) **strictly untuk personal/internal use** — non-production, tools internal, riset/edukasi. **Tidak mengizinkan** redistribution maupun commercial display ke pihak ketiga. External display butuh Redistribution Rights Add-On atau perjanjian tertulis; attribution wajib bila data ditampilkan publik. Implikasi untuk Fynence: journal pribadi = masih personal use, wajib atribusi bila ditampilkan publik; **SaaS untuk user lain = tidak boleh di free tier** — gate rilis komersial, bukan sekadar TODO teknis.
 
 Biaya kredit: `/time_series` = 1/simbol, `/quote` `/price` `/eod` = 1/simbol, `/time_series/cross` = 5/request. Hormati 429; batasi ≤ 8 kredit/menit dan ≤ 800/hari; jangan rotasi key.
 
@@ -69,7 +71,9 @@ Utamakan metadata dan tautan ke artikel asli; hindari menyalin artikel penuh; de
 
 [Kandidat Gemini API — pricing](https://ai.google.dev/gemini-api/docs/pricing) dan [rate limits](https://ai.google.dev/gemini-api/docs/rate-limits). Akses dan quota bergantung model, project, serta ketentuan terkini; jangan mengunci satu angka request harian tanpa pemeriksaan. Periksa ketentuan penggunaan data untuk free tier sebelum mengirim jurnal privat.
 
-**Verifikasi 2026-10-16:** key valid — `/v1beta/models` → 200. Generasi terverifikasi end-to-end dengan `gemini-flash-lite-latest` → 200, `finishReason: STOP`. Catatan model: `gemini-2.0-flash` dan `gemini-2.5-flash` sudah pensiun untuk user baru (404, arahkan ke `gemini-3.8-flash`); `gemini-3.8-flash` dan `gemini-flash-latest` sempat 503 "high demand" (transien — tangani sebagai retry-with-backoff, bukan key rusak). Rate limit per tier dan data-use terms free tier belum ditinjau — tetap wajib sebelum kirim data jurnal privat.
+**Verifikasi 2026-10-16:** key valid — `/v1beta/models` → 200. Generasi terverifikasi end-to-end dengan `gemini-flash-lite-latest` → 200, `finishReason: STOP`. Catatan model: `gemini-2.0-flash` dan `gemini-2.5-flash` sudah pensiun untuk user baru (404, arahkan ke `gemini-3.8-flash`); `gemini-3.8-flash` dan `gemini-flash-latest` sempat 503 "high demand" (transien — tangani sebagai retry-with-backoff, bukan key rusak).
+
+**Rate limit 2026-10-17:** halaman [rate limits](https://ai.google.dev/gemini-api/docs/rate-limits) resmi kini berbasis spend + tier project — **tidak ada satu angka publik yang bisa di-hardcode**. Angka RPM/TPM/RPD yang berlaku harus dibaca dari AI Studio pada project yang dipakai (pilih model, catat angka yang tampil). Kebijakan lama di dokumen ini ("jangan mengunci angka harian tanpa pemeriksaan") tetap berlaku dan sekarang jadi satu-satunya jalur yang sah. Data-use terms free tier belum ditinjau — tetap wajib sebelum kirim data jurnal privat.
 
 AI opsional; jangan mengirim rahasia atau data jurnal yang tidak diperlukan. Gunakan formula deterministik untuk metrik finansial, validasi response, hindari regenerasi identik, dan batasi request. Fallback rule-based harus dilabeli sebagai rule-based, bukan AI. Jika tugas tidak aman/andal tanpa AI, tandai fitur unavailable.
 
