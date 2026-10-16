@@ -133,12 +133,36 @@ Mengacu `Prompt/IMPLEMENTATION_ROADMAP.md`.
 | 2 Jurnal manual | selesai | CRUD open/closed, akun, screenshot privat, refleksi |
 | 3 Analytics & dashboard | selesai | Formula tunggal, drawdown, breakdown, R multiple, laporan berbasis aturan |
 | 4 Fondasi data pasar | **tertahan** | Butuh provider terverifikasi |
-| 5 Macro Desk | **tertahan** | Tampil tidak tersedia |
+| 5 Macro Desk | sebagian | Indikator dihitung dari bar tersimpan; kalender ekonomi di Fase 6 masih tertahan |
 | 6 Berita & kalender | **tertahan** | Tampil tidak tersedia |
 | 7 Psychology & AI | sebagian | Psikologi berbasis aturan sudah jalan; bagian AI tertahan |
 | 8 Community & release | belum | — |
 
 Halaman `/macro`, `/news`, `/calendar` sengaja menampilkan status tidak tersedia. Itu state yang benar, bukan bug dan bukan tempat penampung untuk data dummy.
+
+`/macro` sekarang berisi indikator nyata. `/news` dan `/calendar` tetap unavailable karena belum ada provider yang dipilih.
+
+### Macro Desk
+
+Macro Desk dirombak karena versi sebelumnya punya empat cacat yang sudah terbukti:
+
+1. **Menampilkan simbol yang tidak pernah diverifikasi.** Daftar bawaannya `XAUUSD, US30, US500, MNQ, BTCUSD`. `US30` tercatat `coverage: missing`; `US500` dan `MNQ` tidak ada di katalog sama sekali.
+2. **Format simbol tidak akan pernah cocok.** Halaman memakai `XAUUSD`, katalog memakai `XAU/USD`. Keduanya tidak bisa bertemu.
+3. **Tidak bisa mencapai data yang sudah ada.** Ada 510 bar harian tersimpan satu tabel jauhnya, sementara halaman berkata "unavailable".
+4. **Detail page menampilkan empat nama skor** ("Edge Factor", "Flow", "Bearing", "Pulse") dengan nilai tanda hubung. Nama itu menyiratkan metode yang tidak ada di kode ini — label yang membaca sebagai klaim.
+
+Yang dibangun sebagai gantinya:
+
+- `src/lib/market/indicators.ts` — SMA, high/low, perubahan persen, volatilitas disetahunkan, posisi rentang. Semua lewat `decimal.js`, semua definisi standar dan bisa diperiksa.
+- **Setiap indikator menyatakan berapa bar yang dibutuhkan** dan mengembalikan `null` bila kurang. Rata-rata 20 bar dari 8 bar bukan rata-rata 20 bar; versi yang memotong window akan terlihat identik dengan yang lengkap.
+- **Halaman hanya membaca cache.** Macro Desk tidak pernah memanggil provider, jadi membukanya tidak menghabiskan kredit.
+- **Simbol di luar katalog → 404.** Katalog adalah daftar yang sudah diverifikasi ada; merender simbol tak dikenal akan menyiratkan simbol itu sudah dicek.
+- Tanggal bar terakhir ditampilkan di setiap kartu, jadi kebasian data terlihat.
+- **Watchlist dihapus.** Daftar teks bebas itu tidak divalidasi terhadap katalog (bisa menyimpan `US500`) dan tumpang tindih dengan pemilihan instrumen di `/pasar`, yang sudah benar. Tabelnya tidak di-drop, hanya mekanismenya yang dilepas supaya tidak ada dua sumber kebenaran.
+
+Semua angka diverifikasi ulang lewat SQL terhadap database yang sama: SMA 20 `4155.6519`, SMA 50 `4278.8453`, volatilitas `19.1458%`, perubahan 5 bar `-0.17%`, perubahan 20 bar `-2.83%`, posisi rentang `46.0%` — semuanya cocok dengan yang dirender.
+
+Batasan yang tetap ada: bar harian, bukan kutipan live, dan gate lisensi data pasar masih berlaku untuk tampilan komersial.
 
 Kurs referensi (`/kurs`) sudah jalan dan **tidak** tertahan, karena Frankfurter tidak punya gate lisensi. Data pasar tertahan, jadi rilis publik tertahan oleh instrumen, bukan oleh kurs.
 
