@@ -162,11 +162,57 @@ Kandidat: rilis resmi bank sentral/lembaga statistik pemerintah; [Trading Econom
 
 Jika provider gagal, gunakan event cache yang sah dengan status stale, atau tampilkan empty/unavailable. Jangan membuat jadwal, forecast, atau impact yang tidak bersumber.
 
+**Verifikasi 2026-10-17 (belum ada yang disetujui):**
+
+| Kandidat | HTTP | Hasil | Putusan |
+|---|---|---|---|
+| Trading Economics `/calendar` tanpa key | 401 | `You must provide a valid authorization` | bukan akses gratis |
+| Trading Economics `c=guest:guest` | 410 | `the guest account has been discontinued` | jalur gratis sudah dimatikan |
+| Finnhub `/calendar/economic` | 401 | `Please use an API key.` | butuh key |
+| FMP `/v3/economic_calendar` | 401 | `Invalid API KEY` | butuh key |
+| BEA `/news/schedule` | 200 | jadwal bertanggal nyata di HTML: `October 29 8:30 AM GDP (Advance Estimate), 3rd Quarter 2026`, `October 29 8:30 AM Personal Income and Outlays, September 2026`, `November 4 8:30 AM U.S. International Trade in Goods and Services` | **kandidat terkuat**, tapi scraping HTML |
+| Fed `press_monetary.xml` | 200 | item bertanggal, `<category>Monetary Policy</category>` | kandidat kuat |
+| ECB `press.html` | 200 | item bertanggal | kandidat kuat |
+| BLS API v2 tanpa key | 200 | data nyata: CPI `CUUR0000SA0` Sep 2026 = `336.940`, unemployment `LNS14000000` = `4.2` | kuota terlalu kecil, lihat di bawah |
+| BLS HTML/`robots.txt` | 403 | `bot activity that doesn't conform to BLS usage policy is prohibited` | jangan scraping HTML |
+
+**Kuota BLS API tanpa key terlalu kecil untuk dipakai.** Diuji langsung: 25 seri per request (request ke-26 dijawab `Requested Series list has been reduced to the system-allowed limit of 25 series.`), dan **kuota harian habis di request ke-19** dengan pesan `as the daily threshold for total number of requests allocated to the user with registration key has been reached`.
+
+Dua hal yang wajib diingat dari tes ini:
+
+1. **Kegagalan kuota datang sebagai HTTP 200** dengan `status: REQUEST_NOT_PROCESSED`. Sama seperti jebakan Frankfurter: memeriksa kode HTTP saja akan membaca kuota habis sebagai sukses. `status` harus diperiksa, bukan `response.status`.
+2. 25 query/hari tidak cukup untuk refresh berkala satu negara, apalagi banyak. Kandidat ini butuh key terdaftar (500/hari) atau tidak dipakai.
+
+**Status kalender: masih belum ada provider yang disetujui.** Jadwal rilis BEA terbaca tanpa auth dan berisi tanggal + jam, tetapi itu HTML yang di-scrape, bukan feed/API resmi — belum diperiksa apakah izinnya mengizinkan. Kalender tetap unavailable sampai ada yang lolos pemeriksaan lisensi.
+
 ## 5. Berita pasar
 
 Kandidat: publisher APIs, RSS feed publisher bila diizinkan, pengumuman institusi resmi, dan [GDELT](https://www.gdeltproject.org/). Tidak diasumsikan ada satu kuota universal yang gratis. Untuk setiap sumber, periksa request limit, terms, content licensing, retention, attribution, reliability, dan izin menampilkan teks artikel.
 
 Utamakan metadata dan tautan ke artikel asli; hindari menyalin artikel penuh; deduplicate; simpan waktu publikasi dan waktu retrieval. Jika tak ada sumber yang memenuhi syarat, gunakan empty state—jangan membuat headline fiktif.
+
+**Verifikasi 2026-10-17 (belum ada yang disetujui):**
+
+| Kandidat | HTTP | Hasil | Putusan |
+|---|---|---|---|
+| GDELT DOC 2.0 `artlist` | 429 | `Please limit requests to one every 5 seconds` | **tidak layak untuk server** |
+| GDELT mode `timelinevol` | 429 | sama | idem |
+| Fed `press_all.xml` | 200 | 20 item, tiap item punya `title`, `link`, `description`, `pubDate`, `guid`, `category`; rentang 2026-09-11 → 2026-10-16 | kandidat kuat |
+| ECB `press.html` | 200 | 15 item, `title` + `link` + `pubDate` | kandidat kuat |
+| BLS `bls_latest.rss` | 403 | bot diblokir | jangan scraping |
+
+**GDELT tidak bisa dipakai, dan ini bukan soal jeda.** Diuji: burst 5 request → 429/200/429/429/200. Lalu didiamkan **45 detik** dan dicoba sekali lagi → tetap **429**. Artinya batasnya tidak per-IP dan tidak bisa dihindari dengan mengatur jarak request; batas itu dibagi bersama. Request pertama dari sesi yang menganggur pun ditolak. Sebuah cron yang menyegarkan berita terjadwal tidak bisa berjalan di atas ini.
+
+Catatan penting: GDELT dulu punya `mode=artlist` yang berfungsi; sekarang pembatasnya membuatnya efektif tidak tersedia. Kandidat yang "terkenal gratis" tetap bisa mati saat diuji — itulah alasan aturan proyek ini melarang mengaktifkan provider tanpa verifikasi.
+
+**Sumber yang lolos uji teknis: RSS resmi Fed dan ECB.** Keduanya stabil, tanpa auth, dengan item bertanggal dan tautan ke rilis asli — bentuk yang persis diminta dokumen ini (metadata + tautan, bukan salinan artikel).
+
+Dua batasan yang harus diselesaikan sebelum dipakai:
+
+1. **Izin menampilkan belum dinyatakan dalam kata-kata.** Halaman `federalreserve.gov/feeds/feeds.htm` menjelaskan bahwa aggregator "display the links, headlines, and a brief summary of the feed" — itu menggambarkan bentuk pemakaian yang wajar, bukan lisensi eksplisit. Halaman kebijakan Fed sendiri hanya membahas tautan ke situs luar dan tidak menyatakan apa pun tentang kontennya sendiri. `usagov.gov` justru memperingatkan bahwa materi pemerintah federal "may be subject to copyright or other restrictions" dan menyuruh menghubungi instansi pengelolanya. Jadi asumsi "pemerintah AS = bebas dipakai" **tidak aman** dan tidak dipakai di sini.
+2. **Cakupan sempit.** Fed dan ECB hanya menerbitkan rilis resmi mereka sendiri. Itu bukan "berita pasar" dalam arti luas, dan tidak boleh dipresentasikan seolah-olah begitu.
+
+**Status berita: masih belum ada provider yang disetujui.** RSS resmi adalah kandidat terbaik yang tersisa, tetapi wajib ada pernyataan izin yang eksplisit dulu. `/news` tetap unavailable.
 
 ## 6. AI
 
@@ -200,6 +246,8 @@ Untuk analisis turunan, catat versi metode, input yang dipakai, timeframe, evalu
 | FX conversion | Frankfurter atau sumber yang disetujui | Rate manual yang diberi label atau ungkapkan rate tidak tersedia. |
 | Calendar | Sumber resmi atau provider disetujui | Cache sah berlabel stale; bila tidak ada, empty/unavailable. |
 | News | Publisher/API/RSS/GDELT yang terms-nya sesuai | Empty state dan tautan sumber bila metadata tersedia. |
+
+Catatan 2026-10-17: `tradingeconomics`, `finnhub`, dan `fmp` semuanya menolak akses tanpa key berbayar; GDELT membalas 429 bahkan setelah 45 detik menganggur; BLS API tanpa key habis kuota di request ke-19. Kandidat yang benar-benar lolos uji teknis sejauh ini hanya **BEA release schedule (HTML)**, **RSS Fed**, dan **RSS ECB** — ketiganya belum punya pernyataan izin eksplisit. Calendar dan News tetap unavailable sampai itu ada.
 | Psychology | Catatan trade dan aturan deterministik | Tampilkan hanya insight yang didukung data. |
 | AI Coach/reports | Model opsional yang disetujui | Rule-based untuk tugas yang didukung; selain itu AI unavailable. |
 
