@@ -134,14 +134,14 @@ Mengacu `Prompt/IMPLEMENTATION_ROADMAP.md`.
 | 1 Fondasi & auth | selesai | Email/password + OAuth Google & GitHub |
 | 2 Jurnal manual | selesai | CRUD open/closed, akun, screenshot privat, refleksi |
 | 3 Analytics & dashboard | selesai | Formula tunggal, drawdown, breakdown, R multiple, laporan berbasis aturan |
-| 4 Fondasi data pasar | **tertahan** | Butuh provider terverifikasi |
-| 5 Macro Desk | sebagian | Indikator dihitung dari bar tersimpan; kalender ekonomi di Fase 6 masih tertahan |
+| 4 Fondasi data pasar | sebagian | Provider terverifikasi, 46 instrumen, 510 bar tersimpan; **lisensi tampilan komersial masih menjadi gate rilis publik** |
+| 5 Macro Desk | sebagian | Indikator dihitung dari bar tersimpan; kalender ekonomi tertahan |
 | 6 Berita | sebagian | Rilis resmi Fed + ECB lewat RSS; cakupannya sempit dan dilabeli begitu |
-| 6 Berita & kalender | **tertahan** | Tampil tidak tersedia |
-| 7 Psychology & AI | sebagian | Psikologi berbasis aturan sudah jalan; bagian AI tertahan |
-| 8 Community & release | belum | — |
+| 6 Kalender ekonomi | **tertahan** | Belum ada provider berizin; alasan tertulis di halaman |
+| 7 Psychology & AI | sebagian | Psikologi berbasis aturan sudah jalan; **integrasi AI belum ada sama sekali** |
+| 8 Community & release | belum | Modul tampil unavailable |
 
-Halaman `/macro`, `/news`, `/calendar` sengaja menampilkan status tidak tersedia. Itu state yang benar, bukan bug dan bukan tempat penampung untuk data dummy.
+Halaman `/calendar` dan `/community` sengaja menampilkan status tidak tersedia. Itu state yang benar, bukan bug dan bukan tempat penampung untuk data dummy.
 
 `/macro` sekarang berisi indikator nyata. `/calendar` tetap unavailable karena belum ada provider yang dipilih. `/news` sekarang berisi rilis institusi resmi.
 
