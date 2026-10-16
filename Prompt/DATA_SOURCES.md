@@ -129,7 +129,32 @@ Properti yang sudah diverifikasi:
 
 ## 3. Kurs referensi
 
-[Kandidat Frankfurter](https://frankfurter.dev/) untuk kurs referensi harian/historis. Periksa terms, sumber, jadwal update, dan cache policy. Jangan gunakan kurs referensi harian sebagai harga forex trading real-time. Simpan tanggal rate dan source; jika rate historis tidak ada, ungkapkan kekurangan tersebut.
+[Frankfurter](https://frankfurter.dev/) dipakai untuk kurs referensi. Ini satu-satunya provider yang **tidak punya gate lisensi maupun kuota**, dan sudah diverifikasi ke API nyata 2026-10-17.
+
+### Lisensi (dibaca dari sumbernya, bukan diasumsikan)
+
+- Rate blended adalah perhitungan Frankfurter sendiri dan **bebas dipakai komersial**.
+- **Tidak ada quota.** Ada rate limit anti-abuse, tapi tanpa batas harian/bulanan.
+- Menyimpan kurs secara lokal **dianjurkan** penyedianya.
+- Query langsung ke endpoint provider tertentu **tunduk pada terms provider itu**, bukan lisensi Frankfurter. Karena itu hanya feed blended yang dipakai, dan `source` dicatat per baris.
+- Bukan untuk live trading. Mid-market, granularitas harian.
+
+### Perilaku API yang diverifikasi (2026-10-17)
+
+| Kasus | Jawaban | Penanganan |
+|---|---|---|
+| Mata uang tidak dikenal | `422` + pesan | `invalid-currency` |
+| Tanggal di luar jangkauan | **`200` + array kosong** | `no-data` |
+| Akhir pekan / hari libur | `200`, tanggal efektif mundur | tanggal rate ditampilkan apa adanya |
+| Pasangan lintas mata uang (EUR→IDR) | tersedia | dipakai langsung |
+
+**Baris kedua adalah jebakan.** Sukses-tapi-kosong terlihat seperti keberhasilan; kalau diperlakukan begitu, UI akan bilang "tidak ada kurs" padahal tanggalnya yang salah. Dites secara eksplisit.
+
+### Aturan yang mengikat kode
+
+Kurs ini **hanya untuk menampilkan**. Hasil trade yang dicatat user tidak pernah dihitung ulang dari kurs — P&L tetap angka yang dimasukkan user. Kalau total portfolio bergerak karena kurs harian bergerak, aplikasi sedang menulis ulang sejarah tanpa sepengetahuan user.
+
+Konsekuensi teknisnya: `src/lib/domain/currency.ts` bersifat murni dan tidak menulis apa pun; invers diturunkan saat baca (bukan disimpan dua arah) supaya dua arah tidak bisa berbeda pendapat; konversi yang gagal mengembalikan `null`, bukan angka asli, supaya tidak ada nilai yang ditampilkan dengan simbol mata uang yang salah; dan total campuran melaporkan `missing` + daftar tanggal rate, sehingga total parsial terlihat sebagai parsial.
 
 ## 4. Kalender ekonomi
 

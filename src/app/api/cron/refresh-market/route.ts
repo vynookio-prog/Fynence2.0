@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createTwelveDataProvider } from '@/lib/market/twelvedata'
 import { ingestSeries, readBudget, checkBudget } from '@/lib/market/ingest'
 import { getInsForgeAdminClient } from '@/lib/insforge/admin'
+import { ingestRates, needsRefresh } from '@/lib/rates/store'
 
 /**
  * Scheduled refresh of the instruments users have actually selected.
@@ -87,8 +88,27 @@ export async function POST(request: Request) {
   }
 
   const symbols = await instrumentsInUse()
+
+  // Reference rates share this schedule rather than needing their own. They cost
+  // no quota, and they are daily, so a 12-hour check is generous. Their absence
+  // must not stop the market refresh, so a failure here is reported and ignored.
+  let rates: { refreshed: boolean; stored?: number; rateDate?: string; error?: string }
+  if (await needsRefresh()) {
+    const ingested = await ingestRates()
+    rates = ingested.ok
+      ? { refreshed: true, stored: ingested.stored, rateDate: ingested.rateDate }
+      : { refreshed: false, error: ingested.message }
+  } else {
+    rates = { refreshed: false }
+  }
+
   if (!symbols.length) {
-    return NextResponse.json({ ok: true, refreshed: 0, reason: 'no instruments selected by any user' })
+    return NextResponse.json({
+      ok: true,
+      refreshed: 0,
+      reason: 'no instruments selected by any user',
+      referenceRates: rates,
+    })
   }
 
   const provider = createTwelveDataProvider()
@@ -127,5 +147,6 @@ export async function POST(request: Request) {
     refreshedSymbols: refreshed,
     skipped: skipped.length,
     failed,
+    referenceRates: rates,
   })
 }
