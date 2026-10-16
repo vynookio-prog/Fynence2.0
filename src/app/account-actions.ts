@@ -1,0 +1,6 @@
+'use server'
+import { revalidatePath } from 'next/cache'
+import { getInsForgeServerClient } from '@/lib/insforge/server'
+export type ActionState={error?:string;success?:string}
+const field=(form:FormData,key:string)=>String(form.get(key)??'').trim()
+export async function createAccount(_prev:ActionState,form:FormData):Promise<ActionState>{const name=field(form,'name');const currency=field(form,'base_currency').toUpperCase();const balance=field(form,'initial_balance');if(name.length<1||name.length>80)return{error:'Nama akun wajib diisi (maksimal 80 karakter).'};if(!/^[A-Z]{3}$/.test(currency))return{error:'Gunakan kode mata uang 3 huruf, misalnya USD.'};if(balance&&(!Number.isFinite(Number(balance))||Number(balance)<0))return{error:'Saldo awal harus bernilai positif atau nol.'};const client=await getInsForgeServerClient();const {data:userData,error:userError}=await client.auth.getCurrentUser();if(userError||!userData?.user)return{error:'Sesi berakhir. Silakan masuk kembali.'};const {error}=await client.database.from('trading_accounts').insert([{user_id:userData.user.id,name,account_type:field(form,'account_type')||'journal',base_currency:currency,initial_balance:balance||null,notes:field(form,'notes')||null}]);if(error)return{error:error.message};revalidatePath('/accounts');return{success:'Akun berhasil dibuat.'}}
