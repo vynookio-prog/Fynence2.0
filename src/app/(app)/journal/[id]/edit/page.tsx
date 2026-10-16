@@ -1,19 +1,22 @@
 import { notFound } from 'next/navigation'
 import { TradeForm } from '@/components/trade-form'
+import { listAccounts } from '@/lib/accounts/query'
 import { getTrade, toLocalInput } from '@/lib/trades/query'
 
 export const dynamic = 'force-dynamic'
 
 export default async function EditTradePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const row = await getTrade(id)
+  const [row, accounts] = await Promise.all([getTrade(id), listAccounts()])
   if (!row) notFound()
 
   return (
     <TradeForm
       mode="edit"
+      accounts={accounts}
       values={{
         id: row.id,
+        account_id: row.account_id ?? '',
         symbol: row.symbol,
         direction: row.direction,
         status: row.status,

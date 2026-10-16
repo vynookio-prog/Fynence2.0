@@ -3,9 +3,11 @@ import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, LoaderCircle } from 'lucide-react'
 import { saveTrade, updateTrade, type TradeActionState } from '@/app/trade-actions'
+import type { Account } from '@/lib/accounts/query'
 
 export type TradeFormValues = {
   id?: string
+  account_id: string
   symbol: string
   direction: string
   status: string
@@ -41,7 +43,7 @@ function Field({ label, children, hint }: { label: string; children: React.React
   )
 }
 
-export function TradeForm({ mode, values }: { mode: 'create' | 'edit'; values: TradeFormValues }) {
+export function TradeForm({ mode, values, accounts }: { mode: 'create' | 'edit'; values: TradeFormValues; accounts: Account[] }) {
   const isEdit = mode === 'edit'
   const [step, setStep] = useState(1)
   const [form, setForm] = useState<TradeFormValues>(values)
@@ -77,6 +79,7 @@ export function TradeForm({ mode, values }: { mode: 'create' | 'edit'; values: T
 
       <form action={formAction} className="space-y-5 rounded-xl border border-border bg-surface p-5 sm:p-7">
         {isEdit && <input type="hidden" name="id" value={values.id} />}
+        <input type="hidden" name="account_id" value={form.account_id} />
         <input type="hidden" name="symbol" value={form.symbol} />
         <input type="hidden" name="direction" value={form.direction} />
         <input type="hidden" name="status" value={form.status} />
@@ -104,6 +107,12 @@ export function TradeForm({ mode, values }: { mode: 'create' | 'edit'; values: T
             <p className="mt-1 text-xs text-muted">Instrumen, arah, dan detail eksekusi.</p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Akun" hint={accounts.length ? 'Kelompokkan trade ke satu akun' : 'Belum ada akun — trade tetap bisa disimpan tanpa akun'}>
+              <select name="account_id" value={form.account_id} onChange={update} className={fields}>
+                <option value="">Tanpa akun</option>
+                {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.base_currency})</option>)}
+              </select>
+            </Field>
             <Field label="Symbol"><input required name="symbol" value={form.symbol} onChange={update} placeholder="mis. XAUUSD" className={fields} /></Field>
             <Field label="Arah"><select name="direction" value={form.direction} onChange={update} className={fields}><option value="long">Long</option><option value="short">Short</option></select></Field>
             <Field label="Status"><select name="status" value={form.status} onChange={update} className={fields}><option value="closed">Closed</option><option value="open">Open</option></select></Field>

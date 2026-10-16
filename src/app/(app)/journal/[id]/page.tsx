@@ -5,6 +5,7 @@ import { DeleteTradeButton } from '@/components/delete-trade-button'
 import { ScreenshotSection } from '@/components/screenshot-section'
 import { getTrade } from '@/lib/trades/query'
 import { listScreenshots } from '@/lib/trades/screenshots'
+import { listAccounts } from '@/lib/accounts/query'
 import { realizedNetPnl, type Trade } from '@/lib/domain/trades'
 
 export const dynamic = 'force-dynamic'
@@ -50,7 +51,8 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
   const { id } = await params
   const row = await getTrade(id)
   if (!row) notFound()
-  const screenshots = await listScreenshots(row.id)
+  const [screenshots, accounts] = await Promise.all([listScreenshots(row.id), listAccounts()])
+  const account = accounts.find(a => a.id === row.account_id) ?? null
 
   const trade: Trade = {
     id: row.id, symbol: row.symbol, direction: row.direction, status: row.status,
@@ -76,6 +78,9 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
               <span className={`rounded-full px-2.5 py-1 text-[10px] uppercase ${isClosed ? 'bg-accent/10 text-accent' : 'bg-info/10 text-info'}`}>{row.status}</span>
             </div>
             <p className="mt-2 text-sm text-muted">Dibuka {formatDateTime(row.opened_at)} · {row.setup || 'tanpa setup'}{row.timeframe ? ` · ${row.timeframe}` : ''}</p>
+            <p className="mt-1 text-[11px] text-muted">
+              {account ? `Akun: ${account.name} (${account.base_currency})` : 'Tanpa akun'}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <Link href={`/journal/${row.id}/edit`} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-4 text-xs font-medium hover:bg-secondary">
@@ -118,6 +123,7 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
         <section className="rounded-xl border border-border bg-surface p-5 sm:p-6">
           <h2 className="text-sm font-semibold">Eksekusi</h2>
           <dl className="mt-4">
+            <Row label="Akun" value={account ? `${account.name} (${account.base_currency})` : 'Tanpa akun'} />
             <Row label="Entry price" value={row.entry_price} />
             <Row label="Exit price" value={row.exit_price ?? '—'} />
             <Row label="Position size" value={row.size} />
