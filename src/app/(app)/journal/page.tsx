@@ -9,6 +9,8 @@ import { realizedNetPnl } from '@/lib/domain/trades'
 type Row = {
   id: string; symbol: string; direction: string; status: string
   account_id: string | null
+  /** Base currency of the trade's account. Null when the trade has no account. */
+  currency: string | null
   opened_at: string; closed_at: string | null
   entry_price: string; exit_price: string | null
   size: string; fees: string; realized_pnl: string | null
@@ -20,7 +22,7 @@ const COLUMNS =
 
 export default function JournalPage() {
   const [rows, setRows] = useState<Row[]>([])
-  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([])
+  const [accounts, setAccounts] = useState<{ id: string; name: string; base_currency: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
@@ -38,12 +40,19 @@ export default function JournalPage() {
         if (userError || !userData?.user) throw new Error('Sesi berakhir. Silakan masuk kembali.')
         const [tradesResult, accountsResult] = await Promise.all([
           client.database.from('trades').select(COLUMNS).eq('user_id', userData.user.id).order('opened_at', { ascending: false }).limit(500),
-          client.database.from('trading_accounts').select('id,name').eq('user_id', userData.user.id),
+          client.database.from('trading_accounts').select('id,name,base_currency').eq('user_id', userData.user.id),
         ])
         if (tradesResult.error) throw new Error(tradesResult.error.message)
         if (alive) {
-          setRows((tradesResult.data ?? []) as unknown as Row[])
-          setAccounts((accountsResult.data ?? []) as unknown as { id: string; name: string }[])
+          const loadedAccounts = (accountsResult.data ?? []) as unknown as { id: string; name: string; base_currency: string }[]
+          // The trade row has no currency of its own; it comes from its account.
+          const currencyOf = new Map(loadedAccounts.map(a => [a.id, a.base_currency]))
+          const loadedRows = ((tradesResult.data ?? []) as unknown as Omit<Row, 'currency'>[]).map(r => ({
+            ...r,
+            currency: r.account_id ? currencyOf.get(r.account_id) ?? null : null,
+          }))
+          setRows(loadedRows)
+          setAccounts(loadedAccounts)
         }
       } catch (err) {
         if (alive) setError(err instanceof Error ? err.message : 'Jurnal tidak bisa dimuat.')
@@ -77,7 +86,10 @@ export default function JournalPage() {
       entryPrice: r.entry_price, size: r.size, fees: r.fees, realizedPnl: r.realized_pnl,
     })
     if (value === null) return '—'
-    return `${value.gte(0) ? '+' : ''}${value.toFixed(2)}`
+    // The currency is shown only when it is known. An unlabelled figure in a
+    // list that may mix denominations invites the reader to assume it matches
+    // the row above it.
+    return `${value.gte(0) ? '+' : ''}${value.toFixed(2)}${r.currency ? ` ${r.currency}` : ' ?'}`
   }
 
   return (

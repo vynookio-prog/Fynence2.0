@@ -1,59 +1,44 @@
 import Link from 'next/link'
-import { ArrowRight, BarChart3, TrendingUp } from 'lucide-react'
+import { ArrowRight, BarChart3, CircleAlert, TrendingUp } from 'lucide-react'
 import { EquityChart, DrawdownChart, BreakdownTable } from '@/components/analytics-charts'
-import { getInsForgeServerClient } from '@/lib/insforge/server'
-import { bySetup, bySymbol, byTimeframe, byWeekday, calculateAnalytics } from '@/lib/domain/analytics'
+import { bySetup, bySymbol, byTimeframe, byWeekday, calculateAnalytics, currencyComposition } from '@/lib/domain/analytics'
 import { rByGroup, summarizeRisk } from '@/lib/domain/risk'
-import type { Trade } from '@/lib/domain/trades'
+import { loadTradesWithCurrency } from '@/lib/trades/currency-query'
 
 export const dynamic = 'force-dynamic'
-
-const COLUMNS =
-  'id,symbol,direction,status,opened_at,closed_at,entry_price,exit_price,size,fees,realized_pnl,risk_amount,stop_loss,take_profit,setup,timeframe'
 
 const box = 'rounded-xl border border-border bg-surface p-5'
 
 export default async function AnalyticsPage() {
-  const client = await getInsForgeServerClient()
-  const { data: userData } = await client.auth.getCurrentUser()
-
-  let trades: Trade[] = []
-  let loadError = ''
-  if (userData?.user) {
-    const { data, error } = await client.database
-      .from('trades')
-      .select(COLUMNS)
-      .eq('user_id', userData.user.id)
-      .order('opened_at', { ascending: false })
-      .limit(1000)
-    if (error) loadError = error.message
-    else trades = (data ?? []).map((r: Record<string, unknown>) => ({
-      id: String(r.id), symbol: String(r.symbol), direction: r.direction as Trade['direction'],
-      status: r.status as Trade['status'], openedAt: String(r.opened_at),
-      closedAt: r.closed_at == null ? null : String(r.closed_at),
-      entryPrice: String(r.entry_price),
-      exitPrice: r.exit_price == null ? null : String(r.exit_price),
-      size: String(r.size), fees: String(r.fees),
-      realizedPnl: r.realized_pnl == null ? null : String(r.realized_pnl),
-      riskAmount: r.risk_amount == null ? null : String(r.risk_amount),
-      stopLoss: r.stop_loss == null ? null : String(r.stop_loss),
-      takeProfit: r.take_profit == null ? null : String(r.take_profit),
-      setup: r.setup as string | null, timeframe: r.timeframe as string | null,
-    }))
-  }
+  const loaded = await loadTradesWithCurrency(1000)
+  const trades = loaded.trades
+  const loadError = loaded.error ?? ''
 
   const a = calculateAnalytics(trades)
+  const composition = currencyComposition(trades)
   const risk = summarizeRisk(trades)
   const signed = (v: string | null | undefined) => v == null ? '—' : `${Number(v) >= 0 ? '+' : ''}${v}`
 
+  // Money metrics are only shown with a currency when one currency is actually
+  // present. A net total that silently adds dollars to rupiah is worse than a
+  // dash, because the dash does not pretend to be right.
+  const moneySuffix = composition.uniform ? ` ${composition.currency}` : ''
+  const moneyNote = composition.uniform
+    ? null
+    : composition.currencies.length > 1
+      ? `Trade kamu tercatat dalam ${composition.currencies.join(', ')}. Angka uang tidak digabung lintas mata uang.`
+      : composition.unknownCount > 0
+        ? `${composition.unknownCount} trade tidak punya mata uang karena tidak terhubung ke akun mana pun.`
+        : null
+
   const metrics: [string, string, string][] = [
-    ['Hasil bersih', a.closedCount ? signed(a.netPnl) : '—', 'Realized P&L dikurangi fee tercatat'],
+    ['Hasil bersih', a.closedCount && composition.uniform ? signed(a.netPnl) + moneySuffix : '—', composition.uniform ? 'Realized P&L dikurangi fee tercatat' : 'Dicampur beberapa mata uang, tidak digabung'],
     ['Win rate', a.winRate == null ? '—' : `${a.winRate}%`, `${a.closedCount} trade closed dinilai`],
     ['Profit factor', a.profitFactor == null ? '—' : a.profitFactor.toFixed(2), a.profitFactor == null ? 'Belum ada trade rugi tercatat' : 'Gross win dibagi gross loss'],
-    ['Expectancy', a.expectancy == null ? '—' : signed(a.expectancy), 'Rata-rata bersih per trade closed'],
-    ['Rata-rata menang', a.averageWin ?? '—', 'Dari trade dengan hasil bersih positif'],
-    ['Rata-rata kalah', a.averageLoss ?? '—', 'Dari trade dengan hasil bersih negatif'],
-    ['Menang terbesar', a.largestWin ?? '—', 'Nilai absolut tertinggi'],
+    ['Expectancy', a.expectancy == null ? '—' : signed(a.expectancy) + moneySuffix, composition.uniform ? 'Rata-rata bersih per trade closed' : 'Tidak berlaku lintas mata uang'],
+    ['Rata-rata menang', a.averageWin == null ? '—' : a.averageWin + moneySuffix, 'Dari trade dengan hasil bersih positif'],
+    ['Rata-rata kalah', a.averageLoss == null ? '—' : a.averageLoss + moneySuffix, 'Dari trade dengan hasil bersih negatif'],
+    ['Menang terbesar', a.largestWin == null ? '—' : a.largestWin + moneySuffix, 'Nilai absolut tertinggi'],
     ['Drawdown maksimum', a.maxDrawdown == null ? '—' : a.maxDrawdown.toFixed(2), 'Penurunan terbesar dari puncak equity'],
   ]
 
@@ -71,6 +56,12 @@ export default async function AnalyticsPage() {
       </div>
 
       {loadError && <p role="alert" className="rounded-lg border border-warning/20 bg-warning/[.06] p-4 text-xs text-warning">Analytics tidak bisa dimuat: {loadError}</p>}
+
+      {moneyNote && (
+        <p className="flex gap-2 rounded-lg border border-warning/20 bg-warning/[.05] p-4 text-xs leading-5 text-warning">
+          <CircleAlert size={15} className="mt-0.5 shrink-0" />{moneyNote}
+        </p>
+      )}
 
       {a.incompleteClosedCount > 0 && (
         <p role="status" className="rounded-lg border border-warning/20 bg-warning/[.05] p-4 text-xs leading-5 text-warning">

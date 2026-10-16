@@ -10,6 +10,15 @@ export type Trade = {
   status: TradeStatus
   openedAt: string
   closedAt?: string | null
+  /**
+   * Currency the recorded money values are denominated in, taken from the
+   * account the trade belongs to.
+   *
+   * Nullable on purpose. A trade may have no account, and inventing a currency
+   * for it would be worse than admitting it is unknown: a total that silently
+   * includes an unlabelled amount is wrong in a way nobody can see.
+   */
+  currency?: string | null
   entryPrice: string
   exitPrice?: string | null
   size: string

@@ -117,6 +117,17 @@ Mengacu `Prompt/IMPLEMENTATION_ROADMAP.md`.
 
 Halaman `/macro`, `/news`, `/calendar` sengaja menampilkan status tidak tersedia. Itu state yang benar, bukan bug dan bukan tempat penampung untuk data dummy.
 
+Kurs referensi (`/kurs`) sudah jalan dan **tidak** tertahan, karena Frankfurter tidak punya gate lisensi. Data pasar tertahan, jadi rilis publik tertahan oleh instrumen, bukan oleh kurs.
+
+## Multi mata uang
+
+Nilai uang sebuah trade tidak punya kolom mata uang sendiri; denominasinya berasal dari akun trade itu (`trading_accounts.base_currency`). Dua aturan mengikat:
+
+1. **Kurs hanya mengubah tampilan, tidak pernah catatan.** P&L tetap angka yang user masukkan. `src/lib/domain/currency.ts` murni dan tidak menulis apa pun.
+2. **Uang tidak pernah dijumlahkan lintas mata uang tanpa konversi.** `currencyComposition()` mendeteksi campuran; kalau konversinya tidak tersedia, totalnya **ditahan** dan kekurangannya disebutkan. $100 + Rp100 bukan "200".
+
+Setiap pembacaan trade harus lewat `loadTradesWithCurrency()` (`src/lib/trades/currency-query.ts`) supaya mata uang tidak hilang di satu halaman saja. Trade tanpa akun mendapat `currency: null` — bukan ditebak `'USD'`, karena justru pengecualiannya yang tidak akan terlihat.
+
 ## Menambah provider eksternal
 
 Jangan aktifkan provider sebelum semua ini terjawab dan tercatat:

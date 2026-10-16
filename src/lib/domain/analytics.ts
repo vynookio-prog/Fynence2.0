@@ -31,6 +31,47 @@ export function closedWithResult(trades: Trade[]) {
     .map(t => ({ trade: t, pnl: realizedNetPnl(t) as Decimal }))
 }
 
+/**
+ * Currency situation across a set of trades.
+ *
+ * This exists because summing money across mismatched currencies produces a
+ * number that looks fine and is meaningless. $100 and Rp100 recorded the same
+ * way add up to "200" — the arithmetic succeeds, the answer is nonsense, and
+ * nothing in the UI would hint at it. So the mismatch is detected and stated
+ * rather than averaged away.
+ */
+export type CurrencyComposition = {
+  /** Every distinct currency present, sorted. */
+  currencies: string[]
+  /** True when every trade carries the same, known currency. */
+  uniform: boolean
+  /** Trades with no currency recorded at all. */
+  unknownCount: number
+  /** Trades sharing one currency, when uniform. */
+  currency: string | null
+}
+
+export function currencyComposition(trades: Trade[]): CurrencyComposition {
+  const seen = new Set<string>()
+  let unknownCount = 0
+
+  for (const trade of trades) {
+    const code = trade.currency?.trim().toUpperCase()
+    if (!code) unknownCount += 1
+    else seen.add(code)
+  }
+
+  const currencies = [...seen].sort()
+  const uniform = currencies.length === 1 && unknownCount === 0
+
+  return {
+    currencies,
+    uniform,
+    unknownCount,
+    currency: uniform ? currencies[0] : null,
+  }
+}
+
 export function calculateAnalytics(trades: Trade[]): Analytics {
   const closed = closedWithResult(trades)
   const wins = closed.filter(x => x.pnl.gt(0))

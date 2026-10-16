@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js'
 import { calculateAnalytics, realizedNetPnl, type Trade } from './trades'
+import { currencyComposition } from './analytics'
 
 export type PeriodKey = 'week' | 'month' | 'quarter' | 'all'
 
@@ -44,6 +45,7 @@ export function buildReport(trades: Trade[], periodKey: PeriodKey, now: Date): R
   )
 
   const analytics = calculateAnalytics(scoped)
+  const composition = currencyComposition(scoped)
   const closed = scoped.filter(t => t.status === 'closed')
   const open = scoped.filter(t => t.status === 'open')
 
@@ -61,17 +63,33 @@ export function buildReport(trades: Trade[], periodKey: PeriodKey, now: Date): R
   const results: string[] = []
   if (analytics.closedCount === 0) {
     results.push('Belum ada trade closed dengan hasil tercatat. Metrik hasil belum bisa dihitung.')
+  } else if (!composition.uniform) {
+    // The report's money lines are only meaningful within one currency. Saying
+    // so is the whole point: these lines previously added USD to IDR and
+    // reported a total that read as authoritative.
+    results.push(
+      composition.currencies.length > 1
+        ? `Trade pada periode ini tercatat dalam ${composition.currencies.join(', ')}. Angka uang tidak digabung lintas mata uang, jadi hasil bersih, rata-rata, dan expectancy tidak ditampilkan.`
+        : `${composition.unknownCount} trade tidak punya mata uang, jadi angka uang tidak ditampilkan.`,
+    )
+    results.push(`Win rate: ${analytics.winRate ?? 0}% dari ${analytics.closedCount} trade closed.`)
+    results.push(
+      analytics.profitFactor !== null
+        ? `Profit factor: ${analytics.profitFactor.toFixed(2)} (rasio, tidak terpengaruh mata uang).`
+        : 'Profit factor belum bisa dihitung karena belum ada trade rugi tercatat.',
+    )
   } else {
     const net = new Decimal(analytics.netPnl)
-    results.push(`Hasil bersih: ${net.gte(0) ? '+' : ''}${net.toFixed(2)} (realized P&L dikurangi fee tercatat).`)
+    const currency = ` ${composition.currency}`
+    results.push(`Hasil bersih: ${net.gte(0) ? '+' : ''}${net.toFixed(2)}${currency} (realized P&L dikurangi fee tercatat).`)
     results.push(`Win rate: ${analytics.winRate ?? 0}% dari ${analytics.closedCount} trade closed.`)
     if (analytics.profitFactor !== null) {
       results.push(`Profit factor: ${analytics.profitFactor.toFixed(2)}.`)
     } else {
       results.push('Profit factor belum bisa dihitung karena belum ada trade rugi tercatat.')
     }
-    results.push(`Rata-rata menang: ${analytics.averageWin ?? '—'} · rata-rata kalah: ${analytics.averageLoss ?? '—'}.`)
-    results.push(`Expectancy per trade closed: ${analytics.expectancy ?? '—'}.`)
+    results.push(`Rata-rata menang: ${analytics.averageWin ? analytics.averageWin + currency : '—'} · rata-rata kalah: ${analytics.averageLoss ? analytics.averageLoss + currency : '—'}.`)
+    results.push(`Expectancy per trade closed: ${analytics.expectancy ? analytics.expectancy + currency : '—'}.`)
   }
   sections.push({ heading: 'Hasil', lines: results })
 

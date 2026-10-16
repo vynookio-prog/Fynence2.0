@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bySetup, bySymbol, byWeekday, calculateAnalytics } from './analytics'
+import { bySetup, bySymbol, byWeekday, calculateAnalytics, currencyComposition } from './analytics'
 import type { Trade } from './trades'
 
 const trade = (v: Partial<Trade>): Trade => ({
@@ -80,5 +80,68 @@ describe('breakdowns', () => {
   it('groups by UTC weekday of the close time', () => {
     // 2026-06-01 is a Monday.
     expect(byWeekday([trade({ closedAt: '2026-06-01T11:00:00Z' })]).map(r => r.key)).toEqual(['Senin'])
+  })
+})
+
+describe('currencyComposition', () => {
+  const base = {
+    symbol: 'EURUSD', direction: 'long' as const, status: 'closed' as const,
+    openedAt: '2026-10-01T00:00:00Z', entryPrice: '1.1', size: '1', fees: '0',
+    realizedPnl: '10',
+  }
+
+  it('reports uniformity when every trade shares one currency', () => {
+    const c = currencyComposition([
+      { ...base, id: '1', currency: 'USD' },
+      { ...base, id: '2', currency: 'USD' },
+    ])
+    expect(c.uniform).toBe(true)
+    expect(c.currency).toBe('USD')
+    expect(c.currencies).toEqual(['USD'])
+  })
+
+  it('flags a mismatch rather than picking one currency and summing', () => {
+    // The failure this guards: 100 USD and 100 IDR both look like "100", so a
+    // total of 200 would be arithmetically valid and completely wrong.
+    const c = currencyComposition([
+      { ...base, id: '1', currency: 'USD' },
+      { ...base, id: '2', currency: 'IDR' },
+    ])
+    expect(c.uniform).toBe(false)
+    expect(c.currency).toBeNull()
+    expect(c.currencies).toEqual(['IDR', 'USD'])
+  })
+
+  it('refuses to call a set uniform when a currency is missing', () => {
+    const c = currencyComposition([
+      { ...base, id: '1', currency: 'USD' },
+      { ...base, id: '2', currency: null },
+    ])
+    expect(c.uniform).toBe(false)
+    expect(c.unknownCount).toBe(1)
+  })
+
+  it('treats an empty currency string as unknown, not as its own currency', () => {
+    const c = currencyComposition([{ ...base, id: '1', currency: '  ' }])
+    expect(c.currencies).toEqual([])
+    expect(c.unknownCount).toBe(1)
+    expect(c.uniform).toBe(false)
+  })
+
+  it('normalises case so usd and USD are not treated as two currencies', () => {
+    const c = currencyComposition([
+      { ...base, id: '1', currency: 'usd' },
+      { ...base, id: '2', currency: 'USD' },
+    ])
+    expect(c.uniform).toBe(true)
+    expect(c.currency).toBe('USD')
+  })
+
+  it('handles an empty set without claiming uniformity', () => {
+    const c = currencyComposition([])
+    expect(c.currencies).toEqual([])
+    expect(c.unknownCount).toBe(0)
+    // Nothing present is not the same as one clean currency.
+    expect(c.uniform).toBe(false)
   })
 })

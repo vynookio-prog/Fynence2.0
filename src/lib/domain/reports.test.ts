@@ -8,6 +8,7 @@ const trade = (v: Partial<Trade>): Trade => ({
   id: 't1', symbol: 'XAUUSD', direction: 'long', status: 'closed',
   openedAt: '2026-06-10T09:00:00Z', closedAt: '2026-06-10T11:00:00Z',
   entryPrice: '2000', exitPrice: '2010', size: '1', fees: '1', realizedPnl: '10',
+  currency: 'USD',
   ...v,
 })
 
@@ -66,5 +67,35 @@ describe('buildReport', () => {
     const text = linesOf(buildReport([trade({})], 'week', now), 'Sumber')
     expect(text).toContain('catatan jurnalmu sendiri')
     expect(text).toContain('Tidak ada harga pasar')
+  })
+})
+
+describe('buildReport currency safety', () => {
+  it('shows the net result with its currency when all trades agree', () => {
+    const lines = linesOf(buildReport([trade({ realizedPnl: '10', fees: '3' })], 'all', now), 'Hasil')
+    expect(lines).toContain('+7.00 USD')
+  })
+
+  it('refuses to sum money across currencies and says why', () => {
+    // 100 USD + 100 IDR previously produced a net of "200" that read as a real
+    // total. It must now be withheld and the mismatch named instead.
+    const report = buildReport([
+      trade({ id: 'a', realizedPnl: '100', fees: '0', currency: 'USD' }),
+      trade({ id: 'b', realizedPnl: '100', fees: '0', currency: 'IDR' }),
+    ], 'all', now)
+    const lines = linesOf(report, 'Hasil')
+
+    expect(lines).toContain('IDR, USD')
+    expect(lines).not.toContain('+200')
+    expect(lines).not.toContain('Hasil bersih:')
+    // Ratio metrics survive, because a win rate does not depend on currency.
+    expect(lines).toContain('Win rate')
+    expect(lines).toContain('Profit factor')
+  })
+
+  it('withholds money figures when no currency could be resolved', () => {
+    const lines = linesOf(buildReport([trade({ realizedPnl: '10', currency: null })], 'all', now), 'Hasil')
+    expect(lines).toContain('tidak punya mata uang')
+    expect(lines).not.toContain('+9.00')
   })
 })

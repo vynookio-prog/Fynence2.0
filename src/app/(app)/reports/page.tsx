@@ -1,8 +1,8 @@
 import Link from 'next/link'
 import { CalendarRange, FileText, ShieldCheck } from 'lucide-react'
-import { getInsForgeServerClient } from '@/lib/insforge/server'
 import { buildReport, type PeriodKey } from '@/lib/domain/reports'
-import type { Trade } from '@/lib/domain/trades'
+import { currencyComposition } from '@/lib/domain/analytics'
+import { loadTradesWithCurrency } from '@/lib/trades/currency-query'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,41 +13,19 @@ const PERIODS: { key: PeriodKey; label: string }[] = [
   { key: 'all', label: 'Semua' },
 ]
 
-const COLUMNS =
-  'id,symbol,direction,status,opened_at,closed_at,entry_price,exit_price,size,fees,realized_pnl,setup,timeframe,setup_grade,execution_quality,plan_adherence,emotion'
-
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
   const { period: periodParam } = await searchParams
   const periodKey: PeriodKey = PERIODS.some(p => p.key === periodParam) ? (periodParam as PeriodKey) : 'month'
 
-  const client = await getInsForgeServerClient()
-  const { data: userData } = await client.auth.getCurrentUser()
+  const loaded = await loadTradesWithCurrency(1000)
+  const trades = loaded.trades
+  const loadError = loaded.error ?? ''
 
-  let trades: Trade[] = []
-  let loadError = ''
-  if (userData?.user) {
-    const { data, error } = await client.database
-      .from('trades')
-      .select(COLUMNS)
-      .eq('user_id', userData.user.id)
-      .order('opened_at', { ascending: false })
-      .limit(1000)
-    if (error) loadError = error.message
-    else trades = (data ?? []).map((r: Record<string, unknown>) => ({
-      id: String(r.id), symbol: String(r.symbol), direction: r.direction as Trade['direction'],
-      status: r.status as Trade['status'], openedAt: String(r.opened_at),
-      closedAt: r.closed_at == null ? null : String(r.closed_at),
-      entryPrice: String(r.entry_price),
-      exitPrice: r.exit_price == null ? null : String(r.exit_price),
-      size: String(r.size), fees: String(r.fees),
-      realizedPnl: r.realized_pnl == null ? null : String(r.realized_pnl),
-      setup: r.setup as string | null, timeframe: r.timeframe as string | null,
-      setupGrade: r.setup_grade as number | null,
-      executionQuality: r.execution_quality as number | null,
-      planAdherence: r.plan_adherence as boolean | null,
-      emotion: r.emotion as string | null,
-    }))
-  }
+  // The report's money figures assume one currency. Where trades disagree, the
+  // figures are withheld and the disagreement is named, rather than producing a
+  // total that adds different currencies together.
+  const composition = currencyComposition(trades)
+  const mixedCurrency = !composition.uniform && composition.currencies.length > 1
 
   const report = buildReport(trades, periodKey, new Date())
   const range = periodKey === 'all'
@@ -80,6 +58,13 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       </div>
 
       {loadError && <p role="alert" className="rounded-lg border border-warning/20 bg-warning/[.06] p-3 text-xs text-warning">Laporan tidak bisa dimuat: {loadError}</p>}
+
+      {mixedCurrency && (
+        <p className="rounded-lg border border-warning/20 bg-warning/[.05] p-4 text-xs leading-5 text-warning">
+          Trade pada periode ini tercatat dalam {composition.currencies.join(', ')}. Angka uang tidak digabung lintas
+          mata uang, jadi metrik yang bergantung padanya tidak ditampilkan.
+        </p>
+      )}
 
       {report.tradeCount === 0 ? (
         <div className="rounded-xl border border-border bg-surface p-10 text-center">

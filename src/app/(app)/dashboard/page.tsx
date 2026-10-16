@@ -1,14 +1,15 @@
 import Link from 'next/link'
 import { ArrowDownRight, ArrowRight, BarChart3, Clock3, TrendingUp } from 'lucide-react'
 import { EquityChart } from '@/components/analytics-charts'
-import { getInsForgeServerClient } from '@/lib/insforge/server'
-import { calculateAnalytics } from '@/lib/domain/analytics'
-import { realizedNetPnl, type Trade } from '@/lib/domain/trades'
+import { calculateAnalytics, currencyComposition } from '@/lib/domain/analytics'
+import { realizedNetPnl } from '@/lib/domain/trades'
+import { convertForDisplay, sumForDisplay } from '@/lib/domain/currency'
+import Decimal from 'decimal.js'
+import { loadRates } from '@/lib/rates/store'
+import { displayCurrency } from '@/lib/rates/display'
+import { loadTradesWithCurrency } from '@/lib/trades/currency-query'
 
 export const dynamic = 'force-dynamic'
-
-const COLUMNS =
-  'id,symbol,direction,status,opened_at,closed_at,entry_price,exit_price,size,fees,realized_pnl,setup,timeframe'
 
 function Metric({ label, value, sub, icon: Icon, href }: { label: string; value: string; sub: string; icon: typeof TrendingUp; href: string }) {
   return (
@@ -24,32 +25,43 @@ function Metric({ label, value, sub, icon: Icon, href }: { label: string; value:
 }
 
 export default async function Dashboard() {
-  const client = await getInsForgeServerClient()
-  const { data: userData } = await client.auth.getCurrentUser()
-
-  let trades: Trade[] = []
-  let loadError = ''
-  if (userData?.user) {
-    const { data, error } = await client.database
-      .from('trades')
-      .select(COLUMNS)
-      .eq('user_id', userData.user.id)
-      .order('opened_at', { ascending: false })
-      .limit(1000)
-    if (error) loadError = error.message
-    else trades = (data ?? []).map((r: Record<string, unknown>) => ({
-      id: String(r.id), symbol: String(r.symbol), direction: r.direction as Trade['direction'],
-      status: r.status as Trade['status'], openedAt: String(r.opened_at),
-      closedAt: r.closed_at == null ? null : String(r.closed_at),
-      entryPrice: String(r.entry_price),
-      exitPrice: r.exit_price == null ? null : String(r.exit_price),
-      size: String(r.size), fees: String(r.fees),
-      realizedPnl: r.realized_pnl == null ? null : String(r.realized_pnl),
-      setup: r.setup as string | null, timeframe: r.timeframe as string | null,
-    }))
-  }
+  const loaded = await loadTradesWithCurrency(1000)
+  const trades = loaded.trades
+  const loadError = loaded.error ?? ''
 
   const a = calculateAnalytics(trades)
+  const closedTrades = trades.filter(t => t.status === 'closed' && realizedNetPnl(t) !== null)
+  const composition = currencyComposition(closedTrades)
+  const target = await displayCurrency()
+  const { rates } = await loadRates(composition.currencies, target)
+
+  // Net result grouped by the currency it was recorded in. A single number only
+  // appears when every trade shares one currency; otherwise each currency is
+  // shown on its own and converted separately. The sum across currencies is
+  // deliberately the LAST step, and only claims to be complete when every part
+  // converted.
+  const perCurrency = new Map<string, Decimal>()
+  let unknownPnl = 0
+  for (const trade of closedTrades) {
+    const code = trade.currency?.trim().toUpperCase()
+    if (!code) { unknownPnl += 1; continue }
+    const pnl = realizedNetPnl(trade)
+    if (!pnl) continue
+    perCurrency.set(code, (perCurrency.get(code) ?? new Decimal(0)).plus(pnl))
+  }
+
+  const parts = [...perCurrency.entries()].map(([currency, amount]) => {
+    const converted = convertForDisplay(amount.toString(), currency, target, rates)
+    return { currency, amount: amount.toString(), converted }
+  })
+  const partsConverted = parts.filter(p => p.converted !== null)
+
+  const displayTotal = sumForDisplay(
+    [...perCurrency.entries()].map(([currency, amount]) => ({ amount: amount.toString(), currency })),
+    target,
+    rates,
+  )
+
   const recent = [...trades]
     .sort((x, y) => new Date(y.openedAt).valueOf() - new Date(x.openedAt).valueOf())
     .slice(0, 5)
@@ -73,11 +85,80 @@ export default async function Dashboard() {
       {loadError && <p role="alert" className="rounded-lg border border-warning/20 bg-warning/[.06] p-4 text-xs text-warning">Data jurnal tidak bisa dimuat: {loadError}</p>}
 
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <Metric label="Hasil bersih" value={a.closedCount ? `${Number(a.netPnl) >= 0 ? '+' : ''}${a.netPnl}` : '—'} sub={a.closedCount ? `Dari ${a.closedCount} trade closed` : 'Belum ada hasil tercatat'} icon={TrendingUp} href="/analytics" />
+        <Metric
+          label="Hasil bersih"
+          value={
+            closedTrades.length === 0 ? '—'
+              : composition.uniform ? `${Number(a.netPnl) >= 0 ? '+' : ''}${a.netPnl} ${composition.currency}`
+                : displayTotal.complete && partsConverted.length > 0
+                  ? `${Number(displayTotal.total) >= 0 ? '+' : ''}${Number(displayTotal.total).toLocaleString('en-US')} ${displayTotal.currency}`
+                  : '—'
+          }
+          sub={
+            closedTrades.length === 0 ? 'Belum ada hasil tercatat'
+              : composition.uniform ? `Dari ${a.closedCount} trade closed`
+                : displayTotal.complete
+                  ? `Konversi dari ${perCurrency.size} mata uang · rate ${displayTotal.rateDates.join(', ')}`
+                  : `Sebagian tidak bisa dikonversi (${displayTotal.missing.join(', ')})`
+          }
+          icon={TrendingUp}
+          href="/analytics"
+        />
         <Metric label="Win rate" value={a.winRate == null ? '—' : `${a.winRate}%`} sub="Dari trade closed" icon={BarChart3} href="/analytics" />
         <Metric label="Profit factor" value={a.profitFactor == null ? '—' : a.profitFactor.toFixed(2)} sub={a.profitFactor == null ? 'Perlu trade rugi tercatat' : 'Gross win / gross loss'} icon={ArrowDownRight} href="/analytics" />
         <Metric label="Total trade" value={String(trades.length)} sub={`${a.openCount} open · ${a.closedCount} closed`} icon={Clock3} href="/journal" />
       </section>
+
+      {!composition.uniform && closedTrades.length > 0 && (
+        <section className="rounded-xl border border-border bg-surface p-5">
+          <h2 className="text-sm font-semibold">Hasil per mata uang</h2>
+          <p className="mt-1 text-xs leading-5 text-muted">
+            Trade kamu tercatat dalam {composition.currencies.length} mata uang berbeda
+            {composition.unknownCount > 0 && `, dan ${composition.unknownCount} trade tanpa mata uang`}. Tiap mata uang
+            dilaporkan terpisah supaya tidak ada penjumlahan yang tidak bermakna.
+          </p>
+          <div className="mt-4 overflow-hidden rounded-lg border border-border">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-border bg-[#0e1519] text-[10px] uppercase tracking-[.1em] text-muted">
+                  <th scope="col" className="px-3 py-2 font-medium">Mata uang</th>
+                  <th scope="col" className="px-3 py-2 text-right font-medium">Tercatat</th>
+                  <th scope="col" className="px-3 py-2 text-right font-medium">Dalam {target}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {parts.map(part => (
+                  <tr key={part.currency} className="border-b border-border/60 last:border-0">
+                    <th scope="row" className="px-3 py-2 text-left font-mono text-[12px] font-normal">{part.currency}</th>
+                    <td className="px-3 py-2 text-right font-mono text-[12px]">
+                      {Number(part.amount) >= 0 ? '+' : ''}{Number(part.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-[12px]">
+                      {part.converted
+                        ? `${Number(part.converted.amount) >= 0 ? '+' : ''}${Number(part.converted.amount).toLocaleString('en-US')}`
+                        : <span className="text-warning">tanpa kurs</span>}
+                    </td>
+                  </tr>
+                ))}
+                {composition.unknownCount > 0 && (
+                  <tr className="border-b border-border/60 last:border-0">
+                    <th scope="row" className="px-3 py-2 text-left font-mono text-[12px] font-normal text-warning">?</th>
+                    <td className="px-3 py-2 text-right text-[11px] text-warning" colSpan={2}>
+                      {composition.unknownCount} trade tanpa akun · tidak dijumlahkan
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          {!displayTotal.complete && (
+            <p className="mt-3 rounded-md border border-warning/20 bg-warning/[.05] px-3 py-2 text-[11px] leading-5 text-warning">
+              Total gabungan tidak ditampilkan karena {displayTotal.missing.join(', ')} tidak punya kurs tersimpan.
+              Menampilkan total tanpa bagian itu akan terlihat lengkap padahal tidak.
+            </p>
+          )}
+        </section>
+      )}
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,.85fr)]">
         <div className="rounded-xl border border-border bg-surface p-4 sm:p-6">
