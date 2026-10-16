@@ -2,7 +2,9 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft, CircleAlert, Pencil } from 'lucide-react'
 import { DeleteTradeButton } from '@/components/delete-trade-button'
+import { ScreenshotSection } from '@/components/screenshot-section'
 import { getTrade } from '@/lib/trades/query'
+import { listScreenshots } from '@/lib/trades/screenshots'
 import { realizedNetPnl, type Trade } from '@/lib/domain/trades'
 
 export const dynamic = 'force-dynamic'
@@ -48,6 +50,7 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
   const { id } = await params
   const row = await getTrade(id)
   if (!row) notFound()
+  const screenshots = await listScreenshots(row.id)
 
   const trade: Trade = {
     id: row.id, symbol: row.symbol, direction: row.direction, status: row.status,
@@ -139,6 +142,8 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
           </div>
         </section>
       </div>
+
+      <ScreenshotSection tradeId={row.id} screenshots={screenshots} />
 
       <p className="text-[11px] leading-5 text-muted">Semua nilai di halaman ini berasal dari catatanmu sendiri. Tidak ada harga pasar, saldo broker, atau hasil yang disimpulkan dari pergerakan harga.</p>
     </div>
