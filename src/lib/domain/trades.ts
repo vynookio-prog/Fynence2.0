@@ -25,37 +25,28 @@ export type Trade = {
   emotion?: string | null
 }
 
-/** Net result = manually recorded realized P&L minus recorded fees. Never derived from price movement. */
+/**
+ * Net result = manually recorded realized P&L minus recorded fees.
+ * Never derived from price movement, lot size, or contract multiplier.
+ */
 export function realizedNetPnl(trade: Trade): Decimal | null {
   if (trade.status !== 'closed' || trade.realizedPnl == null) return null
   return new Decimal(trade.realizedPnl).minus(trade.fees || '0')
 }
 
-export function calculateAnalytics(trades: Trade[]) {
-  const closed = trades
-    .map(t => ({ trade: t, pnl: realizedNetPnl(t) }))
-    .filter((x): x is { trade: Trade; pnl: Decimal } => x.pnl !== null)
-  const wins = closed.filter(x => x.pnl.gt(0))
-  const losses = closed.filter(x => x.pnl.lt(0))
-  const net = closed.reduce((s, x) => s.plus(x.pnl), new Decimal(0))
-  const grossWin = wins.reduce((s, x) => s.plus(x.pnl), new Decimal(0))
-  const grossLoss = losses.reduce((s, x) => s.plus(x.pnl.abs()), new Decimal(0))
-
-  return {
-    closedCount: closed.length,
-    openCount: trades.filter(t => t.status === 'open').length,
-    netPnl: net.toFixed(2),
-    winRate: closed.length ? new Decimal(wins.length).div(closed.length).mul(100).toDecimalPlaces(1).toNumber() : null,
-    profitFactor: grossLoss.eq(0) ? null : grossWin.div(grossLoss).toDecimalPlaces(2).toNumber(),
-    averageWin: wins.length ? grossWin.div(wins.length).toFixed(2) : null,
-    averageLoss: losses.length ? grossLoss.div(losses.length).neg().toFixed(2) : null,
-    expectancy: closed.length ? net.div(closed.length).toFixed(2) : null,
-    series: closed.map(({ trade, pnl }) => ({ date: trade.closedAt ?? trade.openedAt, pnl: pnl.toNumber() })),
-  }
-}
-
-/** Whether a trade's lifecycle fields are complete enough to count as a closed record. */
+/** Whether a closed trade carries the fields needed to count as a realized result. */
 export function isCompleteClosedTrade(trade: Trade): boolean {
   if (trade.status !== 'closed') return true
   return Boolean(trade.closedAt) && trade.exitPrice != null && trade.realizedPnl != null
 }
+
+export {
+  byMonth,
+  bySetup,
+  bySymbol,
+  byTimeframe,
+  byWeekday,
+  calculateAnalytics,
+  closedWithResult,
+} from './analytics'
+export type { Analytics, Breakdown, EquityPoint } from './analytics'
