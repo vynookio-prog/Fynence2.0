@@ -107,6 +107,8 @@ Dijalankan manual: `diagnose advisor` dan `diagnose db` **tidak bisa dipakai** p
 | Tabel deny-all (`market_fetch_log`) | user login → `403`; `anon` → `401` |
 | Grant `anon` | dicabut seluruhnya (lihat di atas) |
 | Nilai rahasia di bundle klien | tidak ada; hanya anon key yang memang publik |
+
+**`DELETE` yang diizinkan RLS tetap bisa menjawab `204` sambil menghapus nol baris.** Diuji ulang 2026-10-17 pada `release_items`: `DELETE ...?feed=eq.fed` sebagai user login menjawab `204`, lalu hitungan baris menunjukkan fed masih 20 dan ecb masih 15. Dengan `Prefer: return=representation`, jawabannya `200` dan array-nya kosong — jadi kebenarannya terlihat. `204` hanya berarti "permintaan selesai", bukan "baris terhapus". Ini kebalikan dari tabel `anon` di atas: di sana grant-nya yang salah, di sini RLS-nya benar menolak dan kode HTTP-nya yang menyesatkan. Konsekuensinya untuk audit: **selalu ukur hasilnya lewat hitungan baris, jangan lewat kode HTTP.**
 | Modul server bocor ke klien | tidak ada (`insforge/admin`, `market/ingest`, `rates/store` tidak muncul di `.next/static`) |
 | Indeks | setiap kolom filter RLS (`user_id`) terindeks, plus indeks komposit penutup |
 
@@ -134,13 +136,39 @@ Mengacu `Prompt/IMPLEMENTATION_ROADMAP.md`.
 | 3 Analytics & dashboard | selesai | Formula tunggal, drawdown, breakdown, R multiple, laporan berbasis aturan |
 | 4 Fondasi data pasar | **tertahan** | Butuh provider terverifikasi |
 | 5 Macro Desk | sebagian | Indikator dihitung dari bar tersimpan; kalender ekonomi di Fase 6 masih tertahan |
+| 6 Berita | sebagian | Rilis resmi Fed + ECB lewat RSS; cakupannya sempit dan dilabeli begitu |
 | 6 Berita & kalender | **tertahan** | Tampil tidak tersedia |
 | 7 Psychology & AI | sebagian | Psikologi berbasis aturan sudah jalan; bagian AI tertahan |
 | 8 Community & release | belum | — |
 
 Halaman `/macro`, `/news`, `/calendar` sengaja menampilkan status tidak tersedia. Itu state yang benar, bukan bug dan bukan tempat penampung untuk data dummy.
 
-`/macro` sekarang berisi indikator nyata. `/news` dan `/calendar` tetap unavailable karena belum ada provider yang dipilih.
+`/macro` sekarang berisi indikator nyata. `/calendar` tetap unavailable karena belum ada provider yang dipilih. `/news` sekarang berisi rilis institusi resmi.
+
+### Rilis institusi (`/news`)
+
+Halaman ini dulu menanyakan tabel `news_items` yang **tidak pernah dibuat**, lalu menampilkan "No approved news source configured" — pesan yang kebetulan benar tetapi datang dari error, bukan dari keputusan. Judulnya juga berbunyi "Market news" padahal belum ada sumber yang dipilih.
+
+Sekarang terhubung ke RSS resmi **Federal Reserve Board** dan **European Central Bank**, lewat tabel `release_items`. Rilis tersimpan: 35 baris (Fed 20, ECB 15), semuanya bertanggal.
+
+Cakupannya sempit dan itu dinyatakan di halaman, bukan disembunyikan: ini siaran pers bank sentral, bukan berita pasar. Tidak ada liputan saham, komoditas, atau komentar pasar. Yang disimpan hanya judul, sumber, waktu terbit, dan tautan ke rilis asli — **tidak pernah isi artikel**, supaya tetap sesuai dengan deskripsi pemakaian aggregator di halaman RSS Fed sendiri.
+
+Kenapa RSS dan bukan kandidat komersial, semuanya diuji 2026-10-17:
+
+| Kandidat | Hasil |
+|---|---|
+| Trading Economics | 401 tanpa key; jalur `guest:guest` → 410 "guest account has been discontinued" |
+| Finnhub, FMP | 401, butuh key |
+| GDELT | 429 bahkan setelah menganggur 45 detik; batas dibagi bersama |
+| BLS API tanpa key | data nyata, tapi kuota harian habis di request ke-19 |
+| BLS HTML/RSS | 403, bot diblokir |
+| **RSS Fed + ECB** | **200, stabil, tanpa auth, item bertanggal + tautan asli** |
+
+Satu kaveat tetap ditampilkan di halaman: **izin pemakaian belum dinyatakan eksplisit**. Halaman RSS Fed menjelaskan aggregator menampilkan "links, headlines, and a brief summary", dan USAGov memperingatkan materi pemerintah federal bisa punya pembatasan. Karena itu hanya metadata + tautan yang disimpan. Konfirmasi ke kedua institusi tetap diperlukan sebelum rilis komersial.
+
+`/calendar` masih unavailable, dan sekarang dengan alasan tertulis. RSS Fed/ECB memuat rilis bertanggal tetapi **tidak memuat angka `forecast`, `actual`, atau `previous`** — tiga hal yang membuat kalender berguna. Menaikkannya jadi "event" akan memberi kesan ada isi yang tidak ada. Jadwal rilis BEA terbaca tanpa auth dan berisi tanggal + jam nyata, tetapi itu HTML yang di-scrape dan ketentuannya belum diperiksa, jadi ditautkan apa adanya, tidak diurai.
+
+Penyegaran rilis menumpang jadwal cron yang sudah ada (`REFRESH_AFTER_MS` = 3 jam). Nol kuota, dan kegagalannya tidak menghentikan refresh pasar.
 
 ### Macro Desk
 

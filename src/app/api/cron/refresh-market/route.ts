@@ -3,6 +3,7 @@ import { createTwelveDataProvider } from '@/lib/market/twelvedata'
 import { ingestSeries, readBudget, checkBudget } from '@/lib/market/ingest'
 import { getInsForgeAdminClient } from '@/lib/insforge/admin'
 import { ingestRates, needsRefresh } from '@/lib/rates/store'
+import { refreshReleases, readReleases, REFRESH_AFTER_MS as RELEASES_REFRESH_AFTER_MS } from '@/lib/news/store'
 
 /**
  * Scheduled refresh of the instruments users have actually selected.
@@ -89,6 +90,23 @@ export async function POST(request: Request) {
 
   const symbols = await instrumentsInUse()
 
+  // Institutional releases ride the same schedule. They cost no quota and the
+  // sources publish a few times a day, so a 3-hour check is generous. A failure
+  // here must not stop the market refresh, so it is reported and not thrown.
+  let releases: { refreshed: boolean; written?: number; sources?: unknown; error?: string }
+  try {
+    const current = await readReleases(1)
+    const ageMs = current.retrievedAt ? Date.now() - new Date(current.retrievedAt).valueOf() : Infinity
+    if (ageMs > RELEASES_REFRESH_AFTER_MS || current.empty) {
+      const result = await refreshReleases()
+      releases = { refreshed: true, written: result.written, sources: result.sources }
+    } else {
+      releases = { refreshed: false }
+    }
+  } catch (error) {
+    releases = { refreshed: false, error: error instanceof Error ? error.message : 'release refresh failed' }
+  }
+
   // Reference rates share this schedule rather than needing their own. They cost
   // no quota, and they are daily, so a 12-hour check is generous. Their absence
   // must not stop the market refresh, so a failure here is reported and ignored.
@@ -108,6 +126,7 @@ export async function POST(request: Request) {
       refreshed: 0,
       reason: 'no instruments selected by any user',
       referenceRates: rates,
+      releases,
     })
   }
 
@@ -148,5 +167,6 @@ export async function POST(request: Request) {
     skipped: skipped.length,
     failed,
     referenceRates: rates,
+    releases,
   })
 }
