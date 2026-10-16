@@ -96,6 +96,15 @@ Catat URL harga/dokumentasi resmi, limit free yang berlaku di akun, aturan kredi
 
 Minta hanya interval/simbol yang diperlukan; deduplicate request; cache secara bounded hanya jika diizinkan; batasi retry/concurrency; hormati HTTP 429; jangan rotasi key/akun untuk melewati limit. Saat quota habis: hentikan request, gunakan cache sah dengan timestamp nyata, gunakan alternatif yang sudah disetujui untuk data/instrumen yang sama, atau tampilkan unavailable. Jangan menampilkan data historis sebagai live.
 
+### Catatan implementasi InsForge SDK (2026-10-17)
+
+Diverifikasi terhadap project nyata, bukan dari dokumentasi:
+
+- **SDK tidak menerjemahkan nama field.** Objek ber-key camelCase dikirim apa adanya dan ditolak `PGRST204 Could not find the '<field>' column`. Setiap insert/upsert harus memakai nama kolom snake_case secara eksplisit. Ini pernah membuat seluruh `market_fetch_log` senyap tidak tertulis.
+- **Insert yang berhasil mengembalikan `data: []`** dengan `status: 201`. Sukses tidak bisa disimpulkan dari `data.length`; periksa `error` dan `status`.
+- **`error` yang tidak diperiksa = kegagalan senyap.** Konsekuensinya nyata di sini: anggaran kredit dibaca dari `market_fetch_log`, jadi log yang tidak tertulis membuat setiap fetch tampak gratis dan `checkBudget` selalu mengizinkan.
+- `market_fetch_log` sengaja **tanpa policy apa pun**. Hanya `project_admin` (service key) yang punya grant; ini disengaja, bukan RLS yang lupa dikonfigurasi.
+
 ## 3. Kurs referensi
 
 [Kandidat Frankfurter](https://frankfurter.dev/) untuk kurs referensi harian/historis. Periksa terms, sumber, jadwal update, dan cache policy. Jangan gunakan kurs referensi harian sebagai harga forex trading real-time. Simpan tanggal rate dan source; jika rate historis tidak ada, ungkapkan kekurangan tersebut.
