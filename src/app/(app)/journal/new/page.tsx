@@ -16,7 +16,7 @@ export default async function NewTradePage() {
         symbol: '', direction: 'long', status: 'closed', opened_at: now, closed_at: now,
         entry_price: '', exit_price: '', size: '', fees: '0', realized_pnl: '',
         setup: '', timeframe: '', stop_loss: '', take_profit: '', exit_reason: '',
-        notes: '', setup_grade: '', execution_quality: '', plan_adherence: '', emotion: '',
+        notes: '', setup_grade: '', execution_quality: '', plan_adherence: '', emotion: '', risk_amount: '',
       }}
     />
   )

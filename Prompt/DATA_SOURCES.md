@@ -2,6 +2,8 @@
 
 **Status:** Kandidat awal; belum ada provider pasar, kalender, berita, atau AI yang disetujui untuk produksi. Verifikasi dokumentasi, coverage, lisensi, kuota, dan privasi sebelum mengaktifkan integrasi.
 
+**Update 2026-10-16:** Verifikasi teknis pertama selesai untuk Twelve Data, Alpha Vantage, dan Gemini API (hasil di bawah). Ini verifikasi teknis — bukan persetujuan produksi. Keputusan lisensi display dan kuota harian akun masih perlu konfirmasi sebelum modul pasar/AI diaktifkan. Key disimpan di root `.env.local` (gitignored): `TWELVEDATA_API_KEY`, `ALPHAVANTAGE_API_KEY`, `GEMINI_API_KEY` — server-side saja, jangan pernah di `NEXT_PUBLIC_*`.
+
 ## 1. Prinsip
 
 1. Jangan pernah mengarang harga, berita, event, atau positioning.
@@ -17,9 +19,27 @@
 ### Kandidat
 
 - [Twelve Data](https://twelvedata.com/docs) — kandidat quote/series; kuota per akun, endpoint, simbol, interval, delay, dan lisensi harus dikonfirmasi.
-- [Alpha Vantage](https://www.alphavantage.co/documentation/) — kandidat historis/market data; allowance dan endpoint yang berlaku harus dicek ulang.
+- [Alpha Vantage](https://www.alphavantage.co/documentation/) — kandidat historis/market data; allowance dan endpoint yang berlaku harus dicek ulang. **Verifikasi 2026-10-16:** key valid (`TIME_SERIES_DAILY` IBM → 200, bar 2026-10-15); limit free dari respons API resminya: **25 request/hari, 1 request/detik**. Belum diuji untuk XAUUSD/BTCUSD/US30/US500/MNQ — coverage per instrumen masih pending.
 - Observasi manual — boleh sebagai catatan, tetapi setiap rekaman harus diberi label `manual` dan waktu input.
 - Dataset historis — gunakan hanya setelah sumber, lisensi, redistribusi, retention, dan cakupan instrumen diverifikasi.
+
+### Hasil verifikasi 2026-10-16 (Twelve Data)
+
+Akun Basic (free) terverifikasi, key valid. Coverage diuji terpisah sesuai pemeriksaan wajib di atas:
+
+| Instrumen Fynence | Simbol diuji | Hasil |
+|---|---|---|
+| XAUUSD | `XAU/USD` | OK — `time_series` 1 hari, `status ok`, `type: Precious Metal`. Bar terakhir close `4177.42008` (2026-10-16). |
+| BTCUSD | `BTC/USD` | OK — `status ok`, `type: Digital Currency`. |
+| US500 | `US500`, `SPX` | Dikenali tapi **terkunci plan** — error: "available starting with the Pro or Venture plan". Tidak ada di free tier. |
+| US30 | `US30`, `DJI` | **Tidak ditemukan** — error: symbol invalid pada reference data. Ticker asli belum terkonfirmasi; jangan asumsikan. |
+| MNQ | `MNQ`, `MNQ1!` | **Tidak didukung** — Twelve Data punya katalog stocks/forex/crypto/ETF/funds/commodities/bonds; tanpa katalog futures. Jangan menganggap MNQ tersedia. |
+
+Fakta kuota/lisensi dari halaman resmi ([pricing](https://twelvedata.com/pricing), Basic): 8 API kredit/menit, 800 kredit/hari, 8 trial WS kredit, hanya 3 markets, dan **"Internal non-display usage"**. Artinya: tampilan harga di UI aplikasi berpotensi butuh hak display di luar free tier — ini lisensi, bukan sekadar teknis. Konfirmasi tertulis sebelum menampilkan data Twelve Data ke user.
+
+Biaya kredit: `/time_series` = 1/simbol, `/quote` `/price` `/eod` = 1/simbol, `/time_series/cross` = 5/request. Hormati 429; batasi ≤ 8 kredit/menit dan ≤ 800/hari; jangan rotasi key.
+
+Endpoint reference `/search` dan `/indexes` `/futures` `/forex` mengembalikan 404 (tidak ada). Yang hidup: `/stocks` `/etfs` `/funds` (200). `/symbol_search` ada tapi fuzzy — hasil tidak cocok untuk klaim coverage.
 
 ### Pemeriksaan sebelum aktivasi
 
@@ -48,6 +68,8 @@ Utamakan metadata dan tautan ke artikel asli; hindari menyalin artikel penuh; de
 ## 6. AI
 
 [Kandidat Gemini API — pricing](https://ai.google.dev/gemini-api/docs/pricing) dan [rate limits](https://ai.google.dev/gemini-api/docs/rate-limits). Akses dan quota bergantung model, project, serta ketentuan terkini; jangan mengunci satu angka request harian tanpa pemeriksaan. Periksa ketentuan penggunaan data untuk free tier sebelum mengirim jurnal privat.
+
+**Verifikasi 2026-10-16:** key valid — `/v1beta/models` → 200. Generasi terverifikasi end-to-end dengan `gemini-flash-lite-latest` → 200, `finishReason: STOP`. Catatan model: `gemini-2.0-flash` dan `gemini-2.5-flash` sudah pensiun untuk user baru (404, arahkan ke `gemini-3.8-flash`); `gemini-3.8-flash` dan `gemini-flash-latest` sempat 503 "high demand" (transien — tangani sebagai retry-with-backoff, bukan key rusak). Rate limit per tier dan data-use terms free tier belum ditinjau — tetap wajib sebelum kirim data jurnal privat.
 
 AI opsional; jangan mengirim rahasia atau data jurnal yang tidak diperlukan. Gunakan formula deterministik untuk metrik finansial, validasi response, hindari regenerasi identik, dan batasi request. Fallback rule-based harus dilabeli sebagai rule-based, bukan AI. Jika tugas tidak aman/andal tanpa AI, tandai fitur unavailable.
 
@@ -80,11 +102,11 @@ Untuk analisis turunan, catat versi metode, input yang dipakai, timeframe, evalu
 
 | Domain | Status |
 |---|---|
-| Market API | Belum dipilih; quota dan coverage belum disetujui. |
+| Market API | Twelve Data: teknis terverifikasi 2026-10-16 (XAU/USD, BTC/USD ok; US500/SPX plan-gated; US30 tidak ditemukan; MNQ tidak didukung) — **lisensi display free tier & approval produksi belum beres**. Alpha Vantage: key valid, limit 25/hari, coverage 5 instrumen belum diuji. |
 | Kalender | Belum dipilih. |
 | Berita | Belum dipilih; lisensi/retention perlu ditinjau. |
-| Kurs referensi | Kandidat Frankfurter; terms/current behavior perlu ditinjau. |
-| AI | Kandidat Gemini; model, quota, dan data-use terms harus ditinjau. |
+| Kurs referensi | Frankfurter: MCP `https://mcp.frankfurter.dev/` terpasang di OpenCode global dan `connected` (tools: `convert`, `get_rates`, `list_currencies`, `list_providers`), endpoint 200 tanpa auth. Terms/update/cache tetap perlu ditinjau sebelum dipakai app. |
+| AI | Gemini: teknis terverifikasi 2026-10-16 (`gemini-flash-lite-latest` generasi OK) — rate limit tier dan data-use terms belum ditinjau. |
 | Manual trade entry | Diputuskan sebagai jalur input trade MVP; tanpa MT5. |
 
 **Jangan aktifkan provider hanya karena endpoint dapat dipanggil.** Persetujuan integrasi baru mensyaratkan dokumentasi resmi, penggunaan yang diizinkan, limit yang diketahui, secret server-side, fallback teruji, dan update dokumen ini.

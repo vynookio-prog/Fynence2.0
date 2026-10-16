@@ -15,6 +15,9 @@ export type Trade = {
   size: string
   fees: string
   realizedPnl?: string | null
+  riskAmount?: string | null
+  stopLoss?: string | null
+  takeProfit?: string | null
   setup?: string | null
   timeframe?: string | null
   notes?: string | null

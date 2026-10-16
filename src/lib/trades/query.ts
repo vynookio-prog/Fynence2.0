@@ -13,6 +13,7 @@ export type TradeRow = {
   size: string
   fees: string
   realized_pnl: string | null
+  risk_amount: string | null
   stop_loss: string | null
   take_profit: string | null
   setup: string | null
@@ -26,7 +27,7 @@ export type TradeRow = {
 }
 
 const COLUMNS =
-  'id,symbol,direction,status,account_id,opened_at,closed_at,entry_price,exit_price,size,fees,realized_pnl,stop_loss,take_profit,setup,timeframe,exit_reason,notes,setup_grade,execution_quality,plan_adherence,emotion'
+  'id,symbol,direction,status,account_id,opened_at,closed_at,entry_price,exit_price,size,fees,realized_pnl,risk_amount,stop_loss,take_profit,setup,timeframe,exit_reason,notes,setup_grade,execution_quality,plan_adherence,emotion'
 
 /**
  * Reads a single trade for the signed-in user. RLS scopes rows to the owner;

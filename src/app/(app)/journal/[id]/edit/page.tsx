@@ -31,6 +31,7 @@ export default async function EditTradePage({ params }: { params: Promise<{ id: 
         timeframe: row.timeframe ?? '',
         stop_loss: row.stop_loss ?? '',
         take_profit: row.take_profit ?? '',
+        risk_amount: row.risk_amount ?? '',
         exit_reason: row.exit_reason ?? '',
         notes: row.notes ?? '',
         setup_grade: row.setup_grade == null ? '' : String(row.setup_grade),

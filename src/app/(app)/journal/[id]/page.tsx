@@ -7,6 +7,7 @@ import { getTrade } from '@/lib/trades/query'
 import { listScreenshots } from '@/lib/trades/screenshots'
 import { listAccounts } from '@/lib/accounts/query'
 import { realizedNetPnl, type Trade } from '@/lib/domain/trades'
+import { plannedRR, realizedR } from '@/lib/domain/risk'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,11 +59,14 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
     id: row.id, symbol: row.symbol, direction: row.direction, status: row.status,
     openedAt: row.opened_at, closedAt: row.closed_at, entryPrice: row.entry_price,
     exitPrice: row.exit_price, size: row.size, fees: row.fees, realizedPnl: row.realized_pnl,
+    riskAmount: row.risk_amount, stopLoss: row.stop_loss, takeProfit: row.take_profit,
   }
   const net = realizedNetPnl(trade)
   const netValue = net === null ? '—' : formatMoney(net.toFixed(2))
   const isClosed = row.status === 'closed'
   const missingResult = isClosed && row.realized_pnl == null
+  const rr = plannedRR(trade)
+  const r = realizedR(trade)
 
   return (
     <div className="mx-auto max-w-[860px] space-y-7">
@@ -129,6 +133,9 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
             <Row label="Position size" value={row.size} />
             <Row label="Stop loss" value={row.stop_loss ?? '—'} />
             <Row label="Take profit" value={row.take_profit ?? '—'} />
+            <Row label="Risk amount" value={row.risk_amount == null ? '—' : formatMoney(row.risk_amount)} />
+            <Row label="R terencana" value={rr == null ? '—' : `${rr.toFixed(2)}R`} />
+            <Row label="R terealisasi" value={r == null ? '—' : `${r.toFixed(2)}R`} />
             <Row label="Ditutup pada" value={formatDateTime(row.closed_at)} />
             <Row label="Alasan keluar" value={row.exit_reason ?? '—'} />
           </dl>

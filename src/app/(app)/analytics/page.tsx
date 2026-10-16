@@ -3,12 +3,13 @@ import { ArrowRight, BarChart3, TrendingUp } from 'lucide-react'
 import { EquityChart, DrawdownChart, BreakdownTable } from '@/components/analytics-charts'
 import { getInsForgeServerClient } from '@/lib/insforge/server'
 import { bySetup, bySymbol, byTimeframe, byWeekday, calculateAnalytics } from '@/lib/domain/analytics'
+import { rByGroup, summarizeRisk } from '@/lib/domain/risk'
 import type { Trade } from '@/lib/domain/trades'
 
 export const dynamic = 'force-dynamic'
 
 const COLUMNS =
-  'id,symbol,direction,status,opened_at,closed_at,entry_price,exit_price,size,fees,realized_pnl,setup,timeframe'
+  'id,symbol,direction,status,opened_at,closed_at,entry_price,exit_price,size,fees,realized_pnl,risk_amount,stop_loss,take_profit,setup,timeframe'
 
 const box = 'rounded-xl border border-border bg-surface p-5'
 
@@ -34,11 +35,15 @@ export default async function AnalyticsPage() {
       exitPrice: r.exit_price == null ? null : String(r.exit_price),
       size: String(r.size), fees: String(r.fees),
       realizedPnl: r.realized_pnl == null ? null : String(r.realized_pnl),
+      riskAmount: r.risk_amount == null ? null : String(r.risk_amount),
+      stopLoss: r.stop_loss == null ? null : String(r.stop_loss),
+      takeProfit: r.take_profit == null ? null : String(r.take_profit),
       setup: r.setup as string | null, timeframe: r.timeframe as string | null,
     }))
   }
 
   const a = calculateAnalytics(trades)
+  const risk = summarizeRisk(trades)
   const signed = (v: string | null | undefined) => v == null ? '—' : `${Number(v) >= 0 ? '+' : ''}${v}`
 
   const metrics: [string, string, string][] = [
@@ -135,6 +140,54 @@ export default async function AnalyticsPage() {
           <BreakdownTable title="Per timeframe" rows={byTimeframe(trades)} />
           <BreakdownTable title="Per hari" rows={byWeekday(trades)} />
         </div>
+      )}
+
+      {a.closedCount > 0 && (
+        <section className={box}>
+          <h2 className="text-sm font-semibold">Risiko & R</h2>
+          <p className="mt-1 text-xs text-muted">
+            R dihitung dari hasil bersih dibagi risk amount yang kamu isi sendiri.
+          </p>
+
+          {risk.withRisk === 0 ? (
+            <p className="mt-4 rounded-lg border border-border bg-[#0a1115] p-3 text-xs leading-5 text-muted">
+              Belum ada trade dengan risk amount. Tanpa angka itu R tidak dihitung — R tidak pernah diturunkan dari selisih harga, ukuran lot, atau multiplier.
+            </p>
+          ) : (
+            <>
+              <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                {([
+                  ['Rata-rata R', risk.averageR == null ? '—' : `${risk.averageR}R`],
+                  ['R terbaik', risk.bestR == null ? '—' : `${risk.bestR}R`],
+                  ['R terburuk', risk.worstR == null ? '—' : `${risk.worstR}R`],
+                  ['Total risiko', risk.totalRisk == null ? '—' : risk.totalRisk],
+                ] as const).map(([label, value]) => (
+                  <div key={label} className="rounded-lg border border-border bg-[#0a1115] p-3">
+                    <p className="text-[11px] text-muted">{label}</p>
+                    <p className="mt-2 font-mono text-lg tabular">{value}</p>
+                  </div>
+                ))}
+              </div>
+              {risk.missingRisk > 0 && (
+                <p role="status" className="mt-3 rounded-lg border border-warning/20 bg-warning/[.05] p-3 text-[11px] leading-5 text-warning">
+                  {risk.missingRisk} trade closed dengan hasil tercatat tidak punya risk amount, sehingga tidak masuk hitungan R.
+                </p>
+              )}
+              <p className="mt-3 text-[11px] leading-5 text-muted">
+                {risk.positiveRShare == null ? '' : `${risk.positiveRShare}% trade berakhir pada 0R atau lebih baik. `}
+                Dihitung dari {risk.withRisk} trade yang punya risk amount.
+              </p>
+            </>
+          )}
+
+          {risk.withRisk > 0 && (
+            <div className="mt-5 border-t border-border pt-5">
+              <BreakdownTable title="Rata-rata R per symbol" rows={rByGroup(trades, t => t.symbol).map(r => ({
+                key: r.key, trades: r.trades, netPnl: r.averageR, winRate: null,
+              }))} />
+            </div>
+          )}
+        </section>
       )}
     </div>
   )

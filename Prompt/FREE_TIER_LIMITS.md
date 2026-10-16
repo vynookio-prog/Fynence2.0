@@ -1,6 +1,6 @@
 # Fynence — Free-Tier Limits and Cost Control
 
-**Status:** Baseline awal dari percakapan yang dibagikan; angka di bawah belum diverifikasi ulang dalam sesi ini.  
+**Status:** Baseline awal dari percakapan yang dibagikan. **Update 2026-10-16:** angka Twelve Data, Alpha Vantage, dan status Gemini/Frankfurter sudah diverifikasi langsung dan ditandai di tabel; angka lain tetap belum diverifikasi.
 **Tujuan biaya:** Rp0 selama penggunaan memenuhi kuota dan terms layanan.  
 **Peringatan:** Kuota, harga, eligibility, dan data-use terms dapat berubah. Verifikasi sumber resmi dan dashboard akun sebelum implementasi/deploy.
 
@@ -58,14 +58,14 @@ Chat sumber menyatakan free project dapat dijeda setelah 7 hari tanpa aktivitas 
 
 | Provider/jenis | Status di chat sumber | Kebijakan |
 |---|---|---|
-| Twelve Data | Kuota persis untuk akun/endpoint belum dikonfirmasi | Verifikasi akun, plan, simbol, interval, dan kredit request. |
-| Alpha Vantage | Ada batas free; angka/endpoint yang berlaku harus dicek lagi | Gunakan dokumentasi endpoint terkini dan cek limit per akun. |
+| Twelve Data | **Terverifikasi 2026-10-16** (halaman resmi pricing, plan Basic): 8 API kredit/menit, 800 kredit/hari, 8 trial WS kredit, 3 markets, "internal non-display usage". `time_series` 1 kredit/simbol. | Key valid di root `.env.local` (`TWELVEDATA_API_KEY`). Batasi ≤8 kredit/menit dan ≤800/hari; hormati 429; jangan rotasi key. **Lisensi display untuk UI aplikasi belum terkonfirmasi.** |
+| Alpha Vantage | **Terverifikasi 2026-10-16** (dari respons API resmi): 25 request/hari, 1 request/detik. | Key valid (`ALPHAVANTAGE_API_KEY`). Kuota harian sangat ketat — hanya untuk insidental, bukan polling. |
 | Manual observations | Tidak memakai quota API | Setiap item harus diberi label manual dan waktu input. |
 | Historical datasets | Bergantung sumber dan lisensi | Verifikasi akuisisi, penyimpanan, dan reuse. |
-| Frankfurter | Kandidat kurs referensi | Periksa terms, sumber, update, dan cache policy. |
+| Frankfurter | **Terverifikasi 2026-10-16**: MCP endpoint `https://mcp.frankfurter.dev/` respon 200 tanpa auth; terpasang di OpenCode global, status `connected`. | Terms/update/cache tetap perlu ditinjau sebelum dipakai app-side. |
 | Kalender | Provider belum dipilih | Jangan menganggap situs publik berarti API gratis/unrestricted. |
 | Berita/GDELT/RSS | Tidak ada kuota universal yang diasumsikan | Periksa request limits, lisensi, retention, dan atribusi per sumber. |
-| Gemini API | Batas spesifik per model/project | Recheck pricing/rate limits dan ketentuan penggunaan data. |
+| Gemini API | **Terverifikasi 2026-10-16**: key valid, generasi OK via `gemini-flash-lite-latest`. Angka rate limit per tier belum diambil dari halaman resmi. | Recheck pricing/rate limits dan ketentuan penggunaan data sebelum kirim jurnal privat. |
 
 Dokumentasi kandidat: [Twelve Data](https://twelvedata.com/docs), [Alpha Vantage](https://www.alphavantage.co/documentation/), [Frankfurter](https://frankfurter.dev/), [Trading Economics](https://docs.tradingeconomics.com/get_started/), [GDELT](https://www.gdeltproject.org/), [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing), [Gemini rate limits](https://ai.google.dev/gemini-api/docs/rate-limits).
 
@@ -112,9 +112,10 @@ Tidak ada klaim penyimpanan offline saat database down kecuali local draft mecha
 |---|---|---|
 | Vercel Hobby | [Limits](https://vercel.com/docs/limits) | Angka berasal dari chat sumber; verifikasi ulang sebelum deploy. |
 | InsForge Free | [Pricing](https://insforge.dev/pricing) | Angka berasal dari chat sumber; verifikasi ulang di dashboard. |
-| Market API | [Twelve Data](https://twelvedata.com/docs), [Alpha Vantage](https://www.alphavantage.co/documentation/) | Pending account/endpoint check. |
-| FX reference | [Frankfurter](https://frankfurter.dev/) | Kandidat; terms/update perlu dicek. |
+| Twelve Data | [Pricing](https://twelvedata.com/pricing), [Docs](https://twelvedata.com/docs) | **Terverifikasi 2026-10-16** — akun Basic live, coverage XAU/USD + BTC/USD ok, US500/SPX berbayar, US30 tak ditemukan, MNQ tak didukung. Lisensi display pending. |
+| Alpha Vantage | [Documentation](https://www.alphavantage.co/documentation/) | **Terverifikasi 2026-10-16** — key valid, 25 request/hari, 1/detik. Coverage 5 instrumen belum diuji. |
+| FX reference | [Frankfurter](https://frankfurter.dev/) | **Endpoint terverifikasi 2026-10-16** (MCP live, `connected`); terms/update perlu dicek. |
 | Calendar/news | Provider belum dipilih | Pending. |
-| AI | [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing) | Model-specific; review data-use terms. |
+| AI | [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing), [Rate limits](https://ai.google.dev/gemini-api/docs/rate-limits) | **Terverifikasi sebagian 2026-10-16** — key valid + generasi OK; rate limit tier dan data-use terms belum ditinjau. |
 
 **Prinsip akhir:** Rp0 harus dijaga oleh arsitektur dan kontrol penggunaan—bukan asumsi bahwa semua layanan gratis tanpa batas.

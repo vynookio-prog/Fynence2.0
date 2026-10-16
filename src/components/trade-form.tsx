@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, LoaderCircle } from 'lucide-react'
 import { saveTrade, updateTrade, type TradeActionState } from '@/app/trade-actions'
+import { plannedRR } from '@/lib/domain/risk'
 import type { Account } from '@/lib/accounts/query'
 
 export type TradeFormValues = {
@@ -22,6 +23,7 @@ export type TradeFormValues = {
   timeframe: string
   stop_loss: string
   take_profit: string
+  risk_amount: string
   exit_reason: string
   notes: string
   setup_grade: string
@@ -50,6 +52,13 @@ export function TradeForm({ mode, values, accounts }: { mode: 'create' | 'edit';
   const [state, formAction, pending] = useActionState(isEdit ? updateTrade : saveTrade, initial)
   const update = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(p => ({ ...p, [e.target.name]: e.target.value }))
+
+  // Live preview, using the same domain function the server renders with.
+  const previewRR = plannedRR({
+    id: '', symbol: form.symbol, direction: form.direction as 'long' | 'short', status: 'open',
+    openedAt: form.opened_at, entryPrice: form.entry_price, size: form.size, fees: form.fees,
+    stopLoss: form.stop_loss || null, takeProfit: form.take_profit || null,
+  })
 
   const steps = ['Detail trade', 'Rencana', 'Refleksi']
 
@@ -92,6 +101,7 @@ export function TradeForm({ mode, values, accounts }: { mode: 'create' | 'edit';
         <input type="hidden" name="realized_pnl" value={form.realized_pnl} />
         <input type="hidden" name="stop_loss" value={form.stop_loss} />
         <input type="hidden" name="take_profit" value={form.take_profit} />
+        <input type="hidden" name="risk_amount" value={form.risk_amount} />
         <input type="hidden" name="setup" value={form.setup} />
         <input type="hidden" name="timeframe" value={form.timeframe} />
         <input type="hidden" name="exit_reason" value={form.exit_reason} />
@@ -134,12 +144,23 @@ export function TradeForm({ mode, values, accounts }: { mode: 'create' | 'edit';
             <p className="mt-1 text-xs text-muted">Risiko, target, dan setup dalam kata-katamu sendiri.</p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Stop loss"><input min="0" step="any" type="number" name="stop_loss" value={form.stop_loss} onChange={update} placeholder="Opsional" className={fields} /></Field>
-            <Field label="Take profit"><input min="0" step="any" type="number" name="take_profit" value={form.take_profit} onChange={update} placeholder="Opsional" className={fields} /></Field>
+            <Field label="Stop loss" hint="Harus di sisi rugi dari entry"><input min="0" step="any" type="number" name="stop_loss" value={form.stop_loss} onChange={update} placeholder="Opsional" className={fields} /></Field>
+            <Field label="Take profit" hint="Harus di sisi untung dari entry"><input min="0" step="any" type="number" name="take_profit" value={form.take_profit} onChange={update} placeholder="Opsional" className={fields} /></Field>
+            <Field label="Risk amount" hint="Uang yang kamu pertaruhkan. Dipakai untuk hitung R. Diisi manual, bukan hasil hitungan."><input min="0" step="any" type="number" name="risk_amount" value={form.risk_amount} onChange={update} placeholder="mis. 100" className={fields} /></Field>
             <Field label="Setup"><input name="setup" value={form.setup} onChange={update} placeholder="mis. Breakout retest" className={fields} /></Field>
             <Field label="Timeframe"><select name="timeframe" value={form.timeframe} onChange={update} className={fields}><option value="">Pilih timeframe</option>{['1m', '5m', '15m', '30m', '1h', '4h', '1D', '1W'].map(t => <option key={t}>{t}</option>)}</select></Field>
             <Field label="Alasan keluar"><input name="exit_reason" value={form.exit_reason} onChange={update} placeholder="mis. Target tercapai" className={fields} /></Field>
             <Field label="Emosi dominan"><select name="emotion" value={form.emotion} onChange={update} className={fields}><option value="">Tidak dicatat</option>{['Tenang', 'Ragu', 'Terburu-buru', 'Takut', 'Serakah', 'Percaya diri'].map(e => <option key={e} value={e}>{e}</option>)}</select></Field>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-[#0a1115] p-3.5">
+            <span className="text-xs text-muted">Reward-to-risk terencana</span>
+            <span className="font-mono text-sm tabular">{previewRR ? `${previewRR.toFixed(2)}R` : '—'}</span>
+            <span className="text-[11px] leading-5 text-muted">
+              {previewRR
+                ? 'Dihitung dari entry, stop, dan target yang kamu isi.'
+                : 'Isi entry, stop loss, dan take profit dengan arah yang benar untuk melihat R.'}
+            </span>
           </div>
         </>}
 

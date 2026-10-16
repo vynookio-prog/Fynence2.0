@@ -45,6 +45,31 @@ function parseTrade(form: FormData): Parsed {
   if (stopLoss && (!money.test(stopLoss) || Number(stopLoss) < 0)) return { error: 'Stop loss harus angka positif atau nol.' }
   if (takeProfit && (!money.test(takeProfit) || Number(takeProfit) < 0)) return { error: 'Take profit harus angka positif atau nol.' }
 
+  // The stop and target must sit on the correct side of entry, otherwise R is
+  // meaningless. The database enforces this too; checking here gives a readable
+  // message instead of a raw constraint error.
+  if (stopLoss) {
+    const wrongSide = direction === 'long' ? Number(stopLoss) >= Number(entry) : Number(stopLoss) <= Number(entry)
+    if (wrongSide) {
+      return { error: direction === 'long'
+        ? 'Stop loss harus di bawah entry price untuk posisi long.'
+        : 'Stop loss harus di atas entry price untuk posisi short.' }
+    }
+  }
+  if (takeProfit) {
+    const wrongSide = direction === 'long' ? Number(takeProfit) <= Number(entry) : Number(takeProfit) >= Number(entry)
+    if (wrongSide) {
+      return { error: direction === 'long'
+        ? 'Take profit harus di atas entry price untuk posisi long.'
+        : 'Take profit harus di bawah entry price untuk posisi short.' }
+    }
+  }
+
+  const riskAmount = v('risk_amount')
+  if (riskAmount && (!money.test(riskAmount) || Number(riskAmount) <= 0)) {
+    return { error: 'Risk amount harus angka lebih besar dari nol.' }
+  }
+
   const grade = v('setup_grade')
   const quality = v('execution_quality')
   if (grade && !['1', '2', '3', '4', '5'].includes(grade)) return { error: 'Penilaian setup harus 1 sampai 5.' }
@@ -67,6 +92,7 @@ function parseTrade(form: FormData): Parsed {
       realized_pnl: status === 'closed' && realized ? realized : null,
       stop_loss: stopLoss || null,
       take_profit: takeProfit || null,
+      risk_amount: riskAmount || null,
       setup: v('setup') || null,
       timeframe: v('timeframe') || null,
       exit_reason: v('exit_reason') || null,
