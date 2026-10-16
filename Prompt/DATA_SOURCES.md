@@ -32,8 +32,16 @@ Akun Basic (free) terverifikasi, key valid. Coverage diuji terpisah sesuai pemer
 | XAUUSD | `XAU/USD` | OK — `time_series` 1 hari, `status ok`, `type: Precious Metal`. Bar terakhir close `4177.42008` (2026-10-16). |
 | BTCUSD | `BTC/USD` | OK — `status ok`, `type: Digital Currency`. |
 | US500 | `US500`, `SPX` | Dikenali tapi **terkunci plan** — error: "available starting with the Pro or Venture plan". Tidak ada di free tier. |
+| US100 | `US100`, `NDX` | **Terkunci plan** — `US100` butuh **Pro/Venture**, `NDX` butuh **Grow/Venture**. Tidak ada di free tier. |
 | US30 | `US30`, `DJI` | **Tidak ditemukan** — error: symbol invalid pada reference data. Ticker asli belum terkonfirmasi; jangan asumsikan. |
 | MNQ | `MNQ`, `MNQ1!` | **Tidak didukung** — Twelve Data punya katalog stocks/forex/crypto/ETF/funds/commodities/bonds; tanpa katalog futures. Jangan menganggap MNQ tersedia. |
+
+**Temuan katalog 2026-10-17 — verifikasi ulang US100/US30:** katalog `/indices` berisi 1.309 simbol dari 37 negara, tetapi **nol indeks Amerika Serikat**. `?exchange=NASDAQ` dan `?exchange=NYSE` keduanya mengembalikan `count: 0`. Tidak ada US30, US100, NDX, DJI, SPX, maupun US500 di katalog mana pun yang dapat diakses free tier.
+
+Konsekuensi: masalahnya **bukan hanya plan-gating**. `US100`/`NDX` memang ada tetapi berbayar; `US30`/`DJI` tidak ada di katalognya sama sekali. Yang tersedia gratis bagi instrumen AS hanyalah **ETF proxy**: `QQQ` (NASDAQ-100) dan `DIA` (Dow Jones) — keduanya `type: ETF`, bukan indeks. ETF melacak indeks tetapi bukan indeks itu sendiri, dan harganya berbeda (ada tracking error, dividen, dan struktur NAV). Menampilkan harga QQQ sebagai "US100" adalah klaim yang salah.
+
+Jalan yang sah bila indeks AS tetap dibutuhkan: naik ke plan Grow/Pro/Venture, atau tampilkan QQQ/DIA dengan **label eksplisit sebagai ETF proxy**, bukan sebagai indeks.
+
 
 Fakta kuota/lisensi dari halaman resmi ([pricing](https://twelvedata.com/pricing), Basic): 8 API kredit/menit, 800 kredit/hari, 8 trial WS kredit, hanya 3 markets, dan **"Internal non-display usage"**.
 
@@ -45,7 +53,20 @@ Endpoint reference `/search` dan `/indexes` `/futures` `/forex` mengembalikan 40
 
 ### Pemeriksaan sebelum aktivasi
 
-Catat URL harga/dokumentasi resmi, limit free yang berlaku di akun, aturan kredit per request, endpoint/simbol/timeframe, historical depth, delay, hak display komersial, aturan cache/redistribusi, serta tanggal verifikasi. Uji coverage terpisah untuk XAUUSD, BTCUSD, US30, US500, dan MNQ; jangan menganggap nama simbol mirip berarti instrumen/kontrak identik.
+Catat URL harga/dokumentasi resmi, limit free yang berlaku di akun, aturan kredit per request, endpoint/simbol/timeframe, historical depth, delay, hak display komersial, aturan cache/redistribusi, serta tanggal verifikasi. Uji coverage terpisah untuk setiap instrumen yang benar-benar dibutuhkan; jangan menganggap nama simbol mirip berarti instrumen/kontrak identik.
+
+**Cakupan setelah penyesuaian 2026-10-17** (US500 dihapus; US100 dan US30 menggantikannya):
+
+| Instrumen | Twelve Data free | Alpha Vantage free | Catatan |
+|---|---|---|---|
+| XAUUSD | ✅ `XAU/USD` | ❌ premium | Hanya Twelve Data |
+| BTCUSD | ✅ `BTC/USD` | ✅ `TIME_SERIES_DAILY` | Satu-satunya yang lolos di dua provider |
+| US100 | ❌ plan-gated (`US100` Pro/Venture, `NDX` Grow/Venture) | ❌ tidak diuji | Butuh plan berbayar, atau pakai `QQQ` dengan label ETF proxy |
+| US30 | ❌ tidak ada di katalog (`count: 0`) | ❌ invalid | Tidak ada bahkan di katalog; hanya `DIA` sebagai ETF proxy |
+| MNQ | ❌ tidak didukung (tanpa katalog futures) | ❌ invalid | Tidak akan tersedia di provider ini berapa pun plan-nya |
+
+**Kesimpulan cakupan:** dari empat instrumen yang dibutuhkan sekarang, hanya **XAUUSD dan BTCUSD** yang dapat diakses di free tier — dan keduanya hanya lewat Twelve Data, yang lisensi free tier-nya personal/internal saja. US100 dan US30 tidak dapat dipenuhi tanpa plan berbayar.
+
 
 ### Kebijakan pengambilan
 
@@ -106,7 +127,7 @@ Untuk analisis turunan, catat versi metode, input yang dipakai, timeframe, evalu
 
 | Domain | Status |
 |---|---|
-| Market API | Twelve Data: teknis terverifikasi 2026-10-16 (XAU/USD, BTC/USD ok; US500/SPX plan-gated; US30 tidak ditemukan; MNQ tidak didukung) — **lisensi display free tier & approval produksi belum beres**. Alpha Vantage: key valid, limit 25/hari, coverage 5 instrumen belum diuji. |
+| Market API | Twelve Data: teknis terverifikasi 2026-10-16 (XAU/USD, BTC/USD ok; US100/US500 plan-gated; US30 tidak ada di katalog — 0 indeks AS dari 1.309; MNQ tidak didukung); **lisensi 2026-10-17: free tier personal/internal only — SaaS komersial dilarang di plan Individual**. Alpha Vantage: 2026-10-17 coverage hanya BTCUSD; XAU premium, US30/MNQ invalid, SPX kosong. |
 | Kalender | Belum dipilih. |
 | Berita | Belum dipilih; lisensi/retention perlu ditinjau. |
 | Kurs referensi | Frankfurter: MCP `https://mcp.frankfurter.dev/` terpasang di OpenCode global dan `connected` (tools: `convert`, `get_rates`, `list_currencies`, `list_providers`), endpoint 200 tanpa auth. Terms/update/cache tetap perlu ditinjau sebelum dipakai app. |
