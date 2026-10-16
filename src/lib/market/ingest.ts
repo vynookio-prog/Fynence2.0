@@ -217,15 +217,57 @@ async function writeCandles(
     retrieved_at: provenance.retrievedAt,
   }))
 
+  // Postgres rejects a single upsert whose payload names the same conflict key
+  // twice: "ON CONFLICT DO UPDATE command cannot affect row a second time".
+  // A provider can return two rows carrying the same bar time, so the payload
+  // is collapsed to one row per key before it is sent. Last one wins, which
+  // matches what a sequential write of the same rows would produce.
+  const deduped = new Map<string, (typeof rows)[number]>()
+  for (const row of rows) {
+    deduped.set(`${row.bar_time}`, row)
+  }
+  const payload = [...deduped.values()]
+
   // onConflict key matches the unique constraint on the table.
   const { error } = await admin.database
     .from('market_candles')
-    .upsert(rows, { onConflict: 'provider,symbol,interval,bar_time' })
+    .upsert(payload, { onConflict: 'provider,symbol,interval,bar_time' })
 
   // Counted, not assumed. Reporting every row as written when the upsert
   // actually failed would turn a storage problem into a fake success.
   if (error) throw new Error(error.message)
-  return rows.length
+  return payload.length
+}
+
+/** Credits a single /time_series lookup costs. */
+const LOOKUP_COST = 1
+
+/**
+ * Records the cost of a provider call that is not a series fetch.
+ *
+ * Instrument lookups spend credits just like series fetches do. If they are not
+ * logged, the budget undercounts and a quota can be exhausted while the
+ * enforcement still believes there is room — which is worse than having no
+ * budget at all, because it is trusted.
+ */
+export async function logLookup(
+  provider: string,
+  symbol: string,
+  status: DataErr['status'] | 'ok',
+  message: string | null,
+): Promise<void> {
+  await logFetch({
+    provider,
+    endpoint: '/time_series',
+    symbol,
+    interval: '1day',
+    httpStatus: status === 'ok' ? 200 : null,
+    outcome: status === 'ok' ? 'ok' : outcomeFor(status),
+    providerCode: null,
+    message,
+    rowsWritten: 0,
+    creditsUsed: LOOKUP_COST,
+  })
 }
 
 /**

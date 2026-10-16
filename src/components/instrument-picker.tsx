@@ -1,20 +1,21 @@
 'use client'
 
-import { useActionState, useState } from 'react'
-import { Check, Loader2, Plus, X } from 'lucide-react'
+import { useActionState, useMemo, useState } from 'react'
+import { Check, Loader2, Plus, Search, X } from 'lucide-react'
 import { addInstrument, removeInstrument, type SelectionResult } from '@/app/pasar/selection-actions'
 import type { CatalogueEntry, SelectedInstrument } from '@/lib/market/selection'
 
 /**
  * Instrument selection.
  *
- * Two separate ideas are shown separately on purpose:
+ * The catalogue is large enough now that one flat list is unusable, so entries
+ * are grouped by the provider's own instrument type and filtered by a search
+ * box. Grouping is a presentation choice only: nothing here decides what is
+ * available, it only arranges what the server already confirmed.
  *
- * - The selected list is what gets rendered and fetched. Capped at five.
- * - The catalogue is what a fetch has proven reachable. A symbol that is
- *   plan-gated or unsupported is absent from it rather than shown greyed out,
- *   so a user cannot spend one of their five slots on something that cannot
- *   load.
+ * A gated or unsupported symbol is absent from the catalogue rather than shown
+ * greyed out, so a user cannot spend one of five slots on something that fails
+ * to load.
  */
 
 type Props = {
@@ -23,14 +24,56 @@ type Props = {
   max: number
 }
 
+/** Display order and labels for the provider's instrument types. */
+const GROUPS: { match: string; label: string }[] = [
+  { match: 'Common Stock', label: 'Saham Nasdaq' },
+  { match: 'ETF', label: 'ETF' },
+  { match: 'Digital Currency', label: 'Crypto' },
+  { match: 'Physical Currency', label: 'Forex' },
+  { match: 'Precious Metal', label: 'Logam mulia' },
+]
+
+function groupLabel(instrumentType: string): string {
+  return GROUPS.find(group => group.match === instrumentType)?.label ?? instrumentType
+}
+
 export function InstrumentPicker({ selected, catalogue, max }: Props) {
   const [addState, add] = useActionState<SelectionResult | null, FormData>(addInstrument, null)
   const [removeState, remove] = useActionState<SelectionResult | null, FormData>(removeInstrument, null)
-  const [confirming, setConfirming] = useState<string | null>(null)
+  const [busyKey, setBusyKey] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
 
   const chosen = new Set(selected.map(item => `${item.provider}:${item.symbol}`))
   const atCapacity = selected.length >= max
-  const available = catalogue.filter(entry => !chosen.has(`${entry.provider}:${entry.symbol}`))
+
+  const { grouped, total } = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    const remaining = catalogue.filter(entry => {
+      if (chosen.has(`${entry.provider}:${entry.symbol}`)) return false
+      if (!needle) return true
+      return entry.symbol.toLowerCase().includes(needle)
+        || entry.instrumentType.toLowerCase().includes(needle)
+        || groupLabel(entry.instrumentType).toLowerCase().includes(needle)
+    })
+
+    const buckets = new Map<string, CatalogueEntry[]>()
+    for (const entry of remaining) {
+      const label = groupLabel(entry.instrumentType)
+      buckets.set(label, [...(buckets.get(label) ?? []), entry])
+    }
+
+    // Ordered by GROUPS, then anything unrecognised alphabetically at the end.
+    const order = GROUPS.map(group => group.label)
+    const sorted = [...buckets.entries()].sort((a, b) => {
+      const ai = order.indexOf(a[0]); const bi = order.indexOf(b[0])
+      if (ai === -1 && bi === -1) return a[0].localeCompare(b[0])
+      if (ai === -1) return 1
+      if (bi === -1) return -1
+      return ai - bi
+    })
+
+    return { grouped: sorted, total: remaining.length }
+  }, [catalogue, chosen, query])
 
   return (
     <div className="space-y-4">
@@ -44,30 +87,34 @@ export function InstrumentPicker({ selected, catalogue, max }: Props) {
 
         {selected.length === 0 ? (
           <p className="mt-3 text-xs leading-5 text-muted">
-            Belum ada yang dipilih. Pilih maksimal {max} instrumen — hanya yang ini yang diambil datanya.
+            Belum ada yang dipilih. Pilih maksimal {max} — hanya yang ini yang diambil datanya.
           </p>
         ) : (
           <ul className="mt-4 space-y-2">
             {selected.map(item => {
               const key = `${item.provider}:${item.symbol}`
-              const busy = confirming === key
+              const entry = catalogue.find(c => c.provider === item.provider && c.symbol === item.symbol)
               return (
                 <li key={key} className="flex items-center justify-between rounded-lg border border-border bg-[#0e1519] px-3 py-2.5">
-                  <div className="flex items-center gap-3">
-                    <Check size={14} className="text-accent" />
-                    <span className="font-mono text-[13px]">{item.symbol}</span>
-                    <span className="text-[10px] text-muted">{item.provider}</span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Check size={13} className="shrink-0 text-accent" />
+                      <span className="font-mono text-[13px]">{item.symbol}</span>
+                    </div>
+                    <p className="mt-0.5 pl-5 text-[10px] text-muted">
+                      {entry ? groupLabel(entry.instrumentType) : item.provider}
+                    </p>
                   </div>
                   <form action={remove}>
                     <input type="hidden" name="provider" value={item.provider} />
                     <input type="hidden" name="symbol" value={item.symbol} />
                     <button
                       type="submit"
-                      aria-label={busy ? `Hapus ${item.symbol}` : `Hapus ${item.symbol} dan datanya`}
-                      className="grid h-7 w-7 place-items-center rounded-md text-muted transition hover:bg-white/[.06] hover:text-danger"
-                      onClick={() => setConfirming(key)}
+                      aria-label={`Hapus ${item.symbol} dari daftar`}
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-muted transition hover:bg-white/[.06] hover:text-danger"
+                      onClick={() => setBusyKey(key)}
                     >
-                      {busy ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
+                      {busyKey === key ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
                     </button>
                   </form>
                 </li>
@@ -76,44 +123,65 @@ export function InstrumentPicker({ selected, catalogue, max }: Props) {
           </ul>
         )}
 
-        {removeState && !removeState.ok && (
-          <p className="mt-3 text-xs text-danger">{removeState.error}</p>
-        )}
+        {removeState && !removeState.ok && <p className="mt-3 text-xs text-danger">{removeState.error}</p>}
       </section>
 
       <section className="rounded-xl border border-border bg-surface p-5">
-        <h2 className="text-sm font-semibold">Tersedia</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Tersedia</h2>
+          <span className="text-[11px] text-muted">{catalogue.length} terverifikasi</span>
+        </div>
         <p className="mt-1 text-[11px] leading-4 text-muted">
-          Hanya instrumen yang sudah terbukti bisa diakses pada plan saat ini. Yang terkunci plan tidak ditampilkan.
+          Hanya instrumen yang sudah terbukti bisa diakses pada plan saat ini.
         </p>
 
-        {available.length === 0 ? (
+        <div className="relative mt-3">
+          <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+          <input
+            type="search"
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+            placeholder="Cari simbol, mis. BTC atau saham"
+            aria-label="Cari instrumen"
+            className="w-full rounded-lg border border-border bg-[#0e1519] py-2 pl-9 pr-3 text-[12px] text-foreground placeholder:text-muted focus:border-accent/50 focus:outline-none"
+          />
+        </div>
+
+        {total === 0 ? (
           <p className="mt-3 text-xs text-muted">
-            {atCapacity ? 'Kamu sudah memakai semua slot.' : 'Semua instrumen yang tersedia sudah dipilih.'}
+            {atCapacity ? 'Semua slot sudah terpakai.' : query ? 'Tidak ada yang cocok.' : 'Semua instrumen tersedia sudah dipilih.'}
           </p>
         ) : (
-          <ul className="mt-4 space-y-2">
-            {available.map(entry => (
-              <li key={`${entry.provider}:${entry.symbol}`}>
-                <form action={add}>
-                  <input type="hidden" name="provider" value={entry.provider} />
-                  <input type="hidden" name="symbol" value={entry.symbol} />
-                  <button
-                    type="submit"
-                    disabled={atCapacity}
-                    className="flex w-full items-center justify-between rounded-lg border border-border bg-[#0e1519] px-3 py-2.5 text-left transition enabled:hover:border-accent/40 disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    <span className="flex items-center gap-3">
-                      <Plus size={14} className="text-muted" />
-                      <span className="font-mono text-[13px]">{entry.symbol}</span>
-                      <span className="text-[10px] text-muted">{entry.instrumentType}</span>
-                    </span>
-                    <span className="text-[10px] text-muted">{entry.exchange ?? entry.provider}</span>
-                  </button>
-                </form>
-              </li>
+          <div className="mt-4 max-h-[420px] space-y-4 overflow-y-auto pr-1">
+            {grouped.map(([label, entries]) => (
+              <div key={label}>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[.12em] text-muted">
+                  {label} <span className="font-normal normal-case tracking-normal">· {entries.length}</span>
+                </p>
+                <ul className="space-y-1.5">
+                  {entries.map(entry => (
+                    <li key={`${entry.provider}:${entry.symbol}`}>
+                      <form action={add}>
+                        <input type="hidden" name="provider" value={entry.provider} />
+                        <input type="hidden" name="symbol" value={entry.symbol} />
+                        <button
+                          type="submit"
+                          disabled={atCapacity}
+                          className="flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-[#0e1519] px-3 py-2 text-left transition enabled:hover:border-accent/40 disabled:cursor-not-allowed disabled:opacity-45"
+                        >
+                          <span className="flex min-w-0 items-center gap-2.5">
+                            <Plus size={13} className="shrink-0 text-muted" />
+                            <span className="truncate font-mono text-[12px]">{entry.symbol}</span>
+                          </span>
+                          <span className="shrink-0 text-[10px] text-muted">{entry.exchange ?? entry.provider}</span>
+                        </button>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
 
         {atCapacity && (
