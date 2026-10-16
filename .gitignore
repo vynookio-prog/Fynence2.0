@@ -28,3 +28,8 @@ Prompt/.next/
 .roo
 .trae
 .windsurf
+.next/
+out/
+dist/
+coverage/
+tsconfig.tsbuildinfo
