@@ -1,4 +1,5 @@
 import { getInsForgeAdminClient } from '@/lib/insforge/admin'
+import { FRESH_FOR_MS } from './ingest'
 import { MAX_INSTRUMENTS, type CatalogueEntry, type SelectedInstrument } from './selection'
 
 // Re-exported so server callers keep one import site, while the definitions
@@ -27,9 +28,6 @@ import type { MarketDataProvider } from './provider'
  * That second point is the whole reason a per-user selection does not have to
  * mean per-user cost. Ten users selecting XAU/USD is one fetch, not ten.
  */
-
-/** How long stored bars are considered good enough before a refetch. */
-const FRESH_FOR_MS = 6 * 60 * 60 * 1000
 
 /**
  * The client these reads go through.
@@ -229,12 +227,17 @@ export async function buildMarketView(
     if (!ingest.ok) {
       // A failed refresh must not blank out bars already stored. Stale data
       // with a stated timestamp beats an empty chart.
+      //
+      // 'still-fresh' cannot appear here: this path never asks ingestSeries to
+      // skip. Narrowing it keeps the failure type honest about what the view
+      // can actually report.
+      const status = ingest.status === 'still-fresh' ? 'unavailable' : ingest.status
       results.push({
         provider: item.provider,
         symbol: item.symbol,
         state,
         candles: await readStoredCandles(item.provider, item.symbol, interval, 200, clientOverride),
-        failure: { status: ingest.status, message: ingest.message },
+        failure: { status, message: ingest.message },
       })
       continue
     }

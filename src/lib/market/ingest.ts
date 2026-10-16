@@ -123,10 +123,41 @@ async function logFetch(entry: FetchLogEntry): Promise<void> {
 
 export type IngestResult =
   | { ok: true; written: number; fetched: number; provenance: Provenance; coverage: 'available' }
-  | { ok: false; status: DataErr['status'] | 'budget'; message: string }
+  | { ok: false; status: DataErr['status'] | 'budget' | 'still-fresh'; message: string }
 
 /** Credits one call to /time_series costs for a single symbol. */
 const SERIES_COST = 1
+
+/** How long stored bars are good enough before a refetch. Shared with the view. */
+export const FRESH_FOR_MS = 6 * 60 * 60 * 1000
+
+export type IngestOptions = {
+  /**
+   * Return without calling the provider when stored bars are still fresh.
+   *
+   * The scheduled refresh uses this. Without it, a cron run would spend a credit
+   * on every symbol every time, including ones fetched minutes ago, which is how
+   * a small quota gets consumed by work that had no reason to happen.
+   */
+  skipIfFresh?: boolean
+}
+
+/** When the most recent stored bar for a symbol was retrieved, if any. */
+async function lastRetrievedAt(provider: string, symbol: string, interval: string): Promise<string | null> {
+  const admin = getInsForgeAdminClient()
+  if (!admin) return null
+
+  const { data } = await admin.database
+    .from('market_candles')
+    .select('retrieved_at')
+    .eq('provider', provider)
+    .eq('symbol', symbol)
+    .eq('interval', interval)
+    .order('retrieved_at', { ascending: false })
+    .limit(1)
+
+  return ((data ?? []) as { retrieved_at: string }[])[0]?.retrieved_at ?? null
+}
 
 /**
  * Fetches a daily series and upserts the bars.
@@ -139,9 +170,17 @@ export async function ingestSeries(
   symbol: string,
   interval: string,
   limit: number,
+  options: IngestOptions = {},
 ): Promise<IngestResult> {
   const admin = getInsForgeAdminClient()
   if (!admin) return { ok: false, status: 'unavailable', message: 'Kunci admin server tidak dikonfigurasi; ingestion tidak tersedia.' }
+
+  if (options.skipIfFresh) {
+    const retrievedAt = await lastRetrievedAt(provider.id, symbol, interval)
+    if (retrievedAt && Date.now() - new Date(retrievedAt).getTime() <= FRESH_FOR_MS) {
+      return { ok: false, status: 'still-fresh', message: 'Cache masih segar; tidak ada permintaan dikirim.' }
+    }
+  }
 
   const snapshot = await readBudget()
   if (!snapshot) return { ok: false, status: 'unavailable', message: 'Tidak bisa membaca anggaran kredit.' }

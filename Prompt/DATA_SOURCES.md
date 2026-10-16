@@ -104,6 +104,28 @@ Diverifikasi terhadap project nyata, bukan dari dokumentasi:
 - **Insert yang berhasil mengembalikan `data: []`** dengan `status: 201`. Sukses tidak bisa disimpulkan dari `data.length`; periksa `error` dan `status`.
 - **`error` yang tidak diperiksa = kegagalan senyap.** Konsekuensinya nyata di sini: anggaran kredit dibaca dari `market_fetch_log`, jadi log yang tidak tertulis membuat setiap fetch tampak gratis dan `checkBudget` selalu mengizinkan.
 - `market_fetch_log` sengaja **tanpa policy apa pun**. Hanya `project_admin` (service key) yang punya grant; ini disengaja, bukan RLS yang lupa dikonfigurasi.
+- **`upsert` menolak payload yang menyebut conflict key yang sama dua kali**: `ON CONFLICT DO UPDATE command cannot affect row a second time`. Payload bar harus di-dedupe per `bar_time` sebelum dikirim.
+- **Semua pengeluaran kredit harus lewat `logFetch`.** Verifikasi instrumen memakai `/time_series` juga, sama seperti fetch bar. Sebelum diperbaiki, lookup tidak tercatat dan anggaran melaporkan sisa kuota yang tidak ada.
+
+### Penjadwalan refresh (`insforge schedules`)
+
+`POST /api/cron/refresh-market` menyegarkan **gabungan instrumen yang dipilih semua user**, satu fetch per simbol, bukan per user. Ini yang membuat kuota tidak bergantung pada siapa yang membuka halaman.
+
+Properti yang sudah diverifikasi:
+
+- Tanpa header `Authorization: Bearer $CRON_SECRET` → `401`. Tanpa secret terkonfigurasi, endpoint **menolak**, tidak berjalan terbuka.
+- Method selain `POST` → `405`.
+- Tidak ada user yang memilih apa pun → `refreshed: 0`, tidak ada kredit terpakai.
+- Cache masih segar → di-skip. Diukur: `considered: 2, refreshed: 0, skipped: 2`, kredit tidak berubah.
+- Cache basi → di-fetch. Diukur: `refreshed: 2`, kredit `24 → 26`.
+- Dua user memilih 4 instrumen (satu simbol dipakai bersama) → `considered: 4`, empat fetch, bukan lima.
+- Kuota per menit penuh → `refreshed: 0, skipped: 4`, nol kredit terpakai.
+
+**Peringatan saat memasang jadwal:**
+
+1. `--url` harus alamat publik aplikasi. `localhost` akan selalu gagal karena penjadwal berjalan di infrastruktur InsForge, bukan di mesin pengembang.
+2. **InsForge menyimpan header jadwal dalam bentuk terbaca.** Siapa pun yang bisa membaca daftar jadwal bisa melihat secret-nya. Rotasi `CRON_SECRET` bila jadwal dibuat ulang atau dipindah pemiliknya.
+3. Cron disarankan `0 */6 * * *` agar cocok dengan jendela kesegaran 6 jam; jadwal lebih rapat dari itu hanya akan di-skip.
 
 ## 3. Kurs referensi
 
